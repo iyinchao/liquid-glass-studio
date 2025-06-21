@@ -57,7 +57,7 @@ export default {
     'editor.shapeWidth': 'Width',
     'editor.shapeHeight': 'Height',
     'editor.shapeRadius': 'Radius (%)',
-    'editor.shapeRoundness': 'Roundness',
+    'editor.shapeRoundness': 'SuperEllipse Factor',
     'editor.mergeRate': 'Merge Rate',
     'editor.showShape1': 'Show 2nd Shape',
     'editor.animationSettings': 'Animation Settings',
