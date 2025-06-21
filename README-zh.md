@@ -14,7 +14,7 @@ https://liquid-glass-studio.vercel.app/
 
 ## 截图预览
 
-<table>
+<table align="center">
   <tr>
     <td><img src="./.github/assets/screen-shot-1.png" width="240" /></td>
     <td><img src="./.github/assets/screen-shot-2.png" width="240" /></td>
