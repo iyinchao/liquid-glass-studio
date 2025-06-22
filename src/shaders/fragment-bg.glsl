@@ -112,14 +112,12 @@ float mainSDF(vec2 p1, vec2 p2, vec2 p) {
 vec2 getCoverUV(vec2 uv, float canvasAspect, float textureAspect) {
   if (canvasAspect > textureAspect) {
     // canvas 更宽，纹理竖向拉伸
-    float delta = canvasAspect - textureAspect;
     float scale = textureAspect / canvasAspect;
-    uv.y = uv.y * scale + delta / 2.0 * scale;
+    uv.y = uv.y * scale + 0.5 - 0.5 * scale;
   } else {
     // canvas 更高，纹理横向拉伸
     float scale = canvasAspect / textureAspect;
-    float delta = textureAspect - canvasAspect;
-    uv.x = uv.x * scale + delta / 2.0;
+    uv.x = uv.x * scale + 0.5 - 0.5 * scale;
   }
   return uv;
 }
