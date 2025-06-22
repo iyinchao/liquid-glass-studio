@@ -27,20 +27,29 @@ https://liquid-glass-studio.vercel.app/
 
 ## 功能特性
 
-- **完整复现 Apple Liquid Glass 效果，包括**：
-  - 折射
-  - 色散
-  - 菲涅尔反射
-  - 超椭圆形状（SuperEllipse）
-  - Blob 效果（形状融合）
-  - 高光眩光
-  - 高斯模糊遮罩
-  - 阴影
-  - 自发光效果
-  - 抗锯齿处理
-- **交互控制面板**：通过直观 UI 实时调整参数
-- **背景支持**：支持多种背景类型，包括图片和视频
-- **动画支持**：基于 Spring 动画机制，可配置参数
+**✨ 完整复现 Apple Liquid Glass 效果，包括**：
+
+- 折射
+- 色散
+- 菲涅尔反射
+- 超椭圆形状（SuperEllipse）
+- Blob 效果（形状融合）
+- 高光眩光
+- 高斯模糊遮罩
+- 阴影
+- 抗锯齿处理
+
+**⚙️ 交互控制面板**：
+
+- 通过直观 UI 实时调整参数
+
+**🖼 背景选项**：
+
+- 支持多种背景类型，包括图片和视频
+
+**🎞 动画**：
+
+- 基于 Spring 动画机制，可配置参数
 
 ## 技术
 
@@ -78,6 +87,16 @@ pnpm build
 - [ ] 控制参数的导入 / 导出功能
 - [ ] 渲染步骤查看器（展示中间处理结果）
 - [ ] 在玻璃形状中嵌入 UI 内容
+
+## 感谢
+
+感谢以下资源和灵感来源：
+
+- [SDF 函数](https://iquilezles.org/articles/distfunctions2d/) 和 [平滑合并函数](https://iquilezles.org/articles/smin/) 来自 [Inigo Quilez](https://iquilezles.org/)
+- 样例图片（Buildings）由 Adrian Newell 在 [Unsplash](https://unsplash.com/photos/a-row-of-multicolored-houses-on-a-street-UtfxJZ-uy5Q) 上提供
+- 样例视频（Fish / Traffic）由 Tom Fisk 在 [Pexels](https://www.pexels.com/video/light-city-road-traffic-4062991/) 上提供
+- 样例视频（Flower）由 Pixabay 在 [Pexels](https://www.pexels.com/video/orange-flowers-856383/) 上提供
+- 样例图片由 Apple 和 Tim Cook 提供
 
 ## 开源协议
 

@@ -27,20 +27,28 @@ https://liquid-glass-studio.vercel.app/
 
 ## Features
 
-- **Full features of Apple Liquid Glass Effects**:
-  - Refraction
-  - Dispersion
-  - Fresnel reflection
-  - SuperEllipse shape
-  - Blob Effect (Shape Merge)
-  - Glare
-  - Gussian Blur Mask
-  - Shadow
-  - Self-illumination
-  - Anti-aliasing
-- **Interactive Controls**: Real-time parameter adjustments with intuitive UI
-- **Background Options**: Multiple background types including images and videos
-- **Animation Support**: Spring-based animations with configurable parameters
+**✨ Apple Liquid Glass Effects:**
+
+- Refraction
+- Dispersion
+- Fresnel reflection
+- Superellipse shapes
+- Blob effect (shape merging)
+- Glare with customizable angle
+- Gaussian blur masking
+- Anti-aliasing
+
+**⚙️ Interactive Controls:**
+
+- Comprehensive real-time parameter adjustments via an intuitive UI
+
+**🖼 Background Options:**
+
+- Support for both images and videos as dynamic backgrounds
+
+**🎞 Animation Support:**
+
+- Spring-based shape animations with configurable behavior
 
 ## Technical Highlights
 
@@ -78,6 +86,16 @@ pnpm build
 - [ ] Control parameter import / export
 - [ ] Render Step view to show intermediate results
 - [ ] UI Content inside of shape
+
+## Credits
+
+Thanks to the following resources and inspirations:
+
+- [SDF functions](https://iquilezles.org/articles/distfunctions2d/) and [smooth merge function](https://iquilezles.org/articles/smin/) by [Inigo Quilez](https://iquilezles.org/)
+- Sample photo (Buildings) by <a href="https://unsplash.com/@anewevisual?utm_content=creditCopyText&utm_medium=referral&utm_source=unsplash">Adrian Newell</a> on <a href="https://unsplash.com/photos/a-row-of-multicolored-houses-on-a-street-UtfxJZ-uy5Q?utm_content=creditCopyText&utm_medium=referral&utm_source=unsplash">Unsplash</a>
+- Sample video (Fish / Traffic) by Tom Fisk from [Pexels](https://www.pexels.com/video/light-city-road-traffic-4062991/)
+- Sample video (Flower) by Pixabay from [Pexels](https://www.pexels.com/video/orange-flowers-856383/)
+- Sample Photo by Apple and Tim Cook
 
 ## License
 
