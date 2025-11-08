@@ -1,0 +1,8 @@
+.canvas {
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
+  width: calc(100% / var(--dpr));
+  height: calc(100% / var(--dpr));
+  transform-origin: top left;
+  transform: scale(calc(1 / var(--dpr)));
+}

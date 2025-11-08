@@ -9,15 +9,3 @@ export function computeGaussianKernelByRadius(radius: number) {
   }
   return kernel.map(w => w / sum); // 归一化
 }
-
-export function isChineseLanguage() {
-  return navigator.language.startsWith('zh');
-}
-
-export function isUzbekLanguage() {
-  return navigator.language.startsWith('uz');
-}
-
-export function capitalize(str: string) {
-  return `${str.charAt(0).toUpperCase()}${str.slice(1)}`;
-}

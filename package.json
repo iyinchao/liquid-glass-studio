@@ -1,8 +1,9 @@
 {
-  "name": "liquid-glass",
-  "private": true,
-  "version": "0.0.0",
+  "name": "liquid-glass-react",
+  "private": false,
+  "version": "0.1.0",
   "type": "module",
+  "description": "React components with Apple's liquid glass effect using WebGL",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -10,14 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@emotion/styled": "^11.14.0",
-    "@mui/icons-material": "^7.1.1",
-    "@mui/material": "^7.1.1",
     "@react-spring/web": "^10.0.1",
-    "clsx": "^2.1.1",
-    "leva": "^0.10.0",
-    "modern-normalize": "^3.0.1",
-    "re-resizable": "^6.11.2",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },

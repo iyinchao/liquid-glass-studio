@@ -1,192 +1,113 @@
+.app {
+  min-height: 100vh;
+  padding: 2rem;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+  color: #fff;
+}
+
 .header {
-  position: fixed;
-  left: 50%;
-  top: 12px;
-  padding: 8px 12px;
-  gap: 8px;
-  transform: translateX(-50%);
-  color: white;
-  font-size: 12px;
+  text-align: center;
+  margin-bottom: 3rem;
+
+  h1 {
+    font-size: 3rem;
+    margin: 0 0 1rem 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  p {
+    font-size: 1.2rem;
+    color: #aaa;
+    margin: 0;
+  }
+}
+
+.demos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 3rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.demo {
+  text-align: center;
+
+  h2 {
+    font-size: 1.2rem;
+    margin: 0 0 1.5rem 0;
+    color: #ccc;
+  }
+}
+
+.button {
+  width: 200px;
+  height: 80px;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 1.2rem;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.card {
+  width: 300px;
+  height: 200px;
+  padding: 2rem;
+  background: transparent;
   display: flex;
   flex-direction: column;
-  background: var(--bg-color-fore);
-  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.5);
-  border-radius: 8px;
   align-items: center;
-  font-family: sans-serif;
+  justify-content: center;
 
-  .logoWrapper {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 12px;
+  h3 {
+    margin: 0 0 1rem 0;
+    font-size: 1.5rem;
   }
 
-  .title {
-    font-size: 16px;
-    font-weight: bold;
-  }
-
-  .subtitle {
-    color: rgba(white, 0.75);
-    font-style: italic;
-  }
-
-  .content {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-
-    .button,
-    .button > svg {
-      width: 16px;
-      height: 16px;
-    }
-
-    .button {
-      color: white;
-      cursor: pointer;
-      &:hover {
-        color: rgb(150, 186, 222);
-      }
-    }
+  p {
+    margin: 0;
+    color: #ddd;
   }
 }
 
-.canvasContainer {
-  width: 100%;
-  height: 100%;
-  overflow: hidden;
-}
-
-.canvas {
-  transform: scale(calc(1 / var(--dpr)));
-  transform-origin: top left;
-  touch-action: none;
-}
-
-.bgSelect {
+.circle {
+  width: 150px;
+  height: 150px;
   display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-left: -44px;
-  z-index: 2;
-  position: relative;
-
-  .bgSelectItem {
-    width: 60px;
-    height: 60px;
-    flex-shrink: 0;
-    border: 1px solid var(--leva-colors-elevation3);
-    border-radius: var(--leva-radii-sm);
-    background-size: cover;
-    overflow: hidden;
-    position: relative;
-
-    &Active {
-      outline: 2px solid var(--leva-colors-accent2);
-    }
-
-    &Overlay {
-      position: absolute;
-      left: 0;
-      right: 0;
-      top: 0;
-      bottom: 0;
-
-      .bgSelectItemVideoIcon {
-        position: absolute;
-        bottom: 0;
-        left: 0;
-        width: 16px;
-        height: 16px;
-        color: rgba(white, 0.8);
-        filter: drop-shadow(0 1px 1.5px rgba(black, 0.8));
-        transition: opacity 300ms;
-      }
-
-      .bgSelectItemCustomIcon {
-        position: absolute;
-        left: 50%;
-        top: 50%;
-        transform: translate(-50%, -50%) scale(0.8);
-        padding: 5px;
-        border-radius: 100%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: rgba(white, 0.9);
-        // filter: drop-shadow(0 1px 2px rgba(black, 0.5));
-        background-color: rgba(black, 0.3);
-      }
-    }
-
-    &TypeCustom {
-      --alpha-pattern-size: 20px;
-      --alpha-pattern-color-a: #5b5f6b;
-      --alpha-pattern-color-b: var(--leva-colors-elevation1);
-
-      &::before {
-        content: '';
-        position: absolute;
-        inset: 0;
-
-        background-color: var(--alpha-pattern-color-b);
-        background-image:
-          repeating-linear-gradient(
-            45deg,
-            var(--alpha-pattern-color-a) 25%,
-            transparent 25%,
-            transparent 75%,
-            var(--alpha-pattern-color-a) 75%,
-            var(--alpha-pattern-color-a)
-          ),
-          repeating-linear-gradient(
-            45deg,
-            var(--alpha-pattern-color-a) 25%,
-            var(--alpha-pattern-color-b) 25%,
-            var(--alpha-pattern-color-b) 75%,
-            var(--alpha-pattern-color-a) 75%,
-            var(--alpha-pattern-color-a)
-          );
-        background-position:
-          0 0,
-          calc(var(--alpha-pattern-size) / 2) calc(var(--alpha-pattern-size) / 2);
-        background-size: var(--alpha-pattern-size) var(--alpha-pattern-size);
-      }
-    }
-  }
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  font-weight: 600;
 }
 
-.bgSelectItemVideo,
-.bgSelectItemImg {
-  left: 0;
-  top: 0;
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
+.tintedCard {
+  width: 250px;
+  height: 100px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
 }
 
-:global(#root > div[class^='leva-']) {
-  background-color: rgba(0, 11, 36, 0.4);
-  & > div:last-child {
-    background-color: rgba(0, 9, 30, 0.6);
-  }
-}
-:global(div[data-leva-folder='1']) {
-  & > div:first-child {
-    & > svg + div {
-      display: none;
-    }
+.footer {
+  text-align: center;
+  margin-top: 5rem;
+  color: #888;
 
-    &::after {
-      content: var(--i18n-name);
-      display: inline;
-    }
-  }
+  a {
+    color: #667eea;
+    text-decoration: none;
 
-  & > div:last-child {
-    background-color: transparent;
+    &:hover {
+      text-decoration: underline;
+    }
   }
 }
