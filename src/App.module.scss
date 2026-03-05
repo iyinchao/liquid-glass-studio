@@ -65,6 +65,29 @@
   touch-action: none;
 }
 
+.perfOverlay {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  padding: 4px 8px;
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 10;
+}
+
+.perfBackend {
+  font-weight: 600;
+  color: #6cf;
+}
+
 .bgSelect {
   display: flex;
   flex-wrap: wrap;

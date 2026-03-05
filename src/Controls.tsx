@@ -351,6 +351,10 @@ export const useLevaControls = ({
         collapsed: true
       }),
       ['debugSettings']: folder({
+        useWebGPU: {
+          label: 'WebGPU',
+          value: false,
+        },
         step: {
           label: 'Show Step',
           value: 9,

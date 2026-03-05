@@ -16,12 +16,18 @@ struct Uniforms {
     u_bgTextureRatio: f32,
     u_showShape1: i32,
     u_time: f32,
-    _pad0: f32,
+    u_textEnabled: i32,
+    u_textScale: f32,
+    u_shapeCount: i32,
+    _pad1: i32,
+    u_shapes: array<vec4<f32>, 8>,
+    u_shapeParams: array<vec4<f32>, 8>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
 @group(0) @binding(1) var texSampler: sampler;
 @group(0) @binding(2) var u_bgTexture: texture_2d<f32>;
+@group(0) @binding(3) var u_textSDF: texture_2d<f32>;
 
 fn chessboard(uv: vec2<f32>, size: f32, mode: i32) -> f32 {
     let yBars = step(size * 2.0, (uv.y * 2.0) % (size * 4.0));
@@ -77,26 +83,69 @@ fn smin(a: f32, b: f32, k: f32) -> f32 {
 }
 
 fn mainSDF(p1: vec2<f32>, p2: vec2<f32>, p: vec2<f32>) -> f32 {
-    let p1n = p1 + p / u.u_resolution.y;
-    let p2n = p2 + p / u.u_resolution.y;
+    var d: f32;
 
-    var d1: f32;
-    if (u.u_showShape1 == 1) {
-        d1 = sdCircle(p1n, 100.0 * u.u_dpr / u.u_resolution.y);
+    if (u.u_shapeCount > 0) {
+        var result = 1.0;
+        var hasShape = false;
+        for (var i = 0; i < 8; i++) {
+            if (i >= u.u_shapeCount) {
+                break;
+            }
+            let shapeCenter = vec2<f32>(u.u_shapes[i].x, u.u_shapes[i].y);
+            let shapeW = u.u_shapes[i].z;
+            let shapeH = u.u_shapes[i].w;
+            let shapeR = u.u_shapeParams[i].x;
+            let shapeN = u.u_shapeParams[i].y;
+            let pn = (-shapeCenter) / u.u_resolution.y + p / u.u_resolution.y;
+            let dd = roundedRectSDF(
+                pn,
+                vec2<f32>(0.0),
+                shapeW / u.u_resolution.y,
+                shapeH / u.u_resolution.y,
+                shapeR / u.u_resolution.y,
+                shapeN
+            );
+            if (!hasShape) {
+                result = dd;
+                hasShape = true;
+            } else {
+                result = smin(result, dd, u.u_mergeRate);
+            }
+        }
+        d = result;
     } else {
-        d1 = 1.0;
+        let p1n = p1 + p / u.u_resolution.y;
+        let p2n = p2 + p / u.u_resolution.y;
+
+        var d1: f32;
+        if (u.u_showShape1 == 1) {
+            d1 = sdCircle(p1n, 100.0 * u.u_dpr / u.u_resolution.y);
+        } else {
+            d1 = 1.0;
+        }
+
+        let d2 = roundedRectSDF(
+            p2n,
+            vec2<f32>(0.0),
+            u.u_shapeWidth / u.u_resolution.y,
+            u.u_shapeHeight / u.u_resolution.y,
+            u.u_shapeRadius / u.u_resolution.y,
+            u.u_shapeRoundness
+        );
+
+        d = smin(d1, d2, u.u_mergeRate);
     }
 
-    let d2 = roundedRectSDF(
-        p2n,
-        vec2<f32>(0.0),
-        u.u_shapeWidth / u.u_resolution.y,
-        u.u_shapeHeight / u.u_resolution.y,
-        u.u_shapeRadius / u.u_resolution.y,
-        u.u_shapeRoundness
-    );
+    if (u.u_textEnabled == 1) {
+        var uv = p / u.u_resolution.xy;
+        uv.y = 1.0 - uv.y;
+        let textSample = textureSample(u_textSDF, texSampler, uv).r;
+        let textDist = (textSample - 0.5) * u.u_textScale / u.u_resolution.y;
+        d = smin(d, textDist, u.u_mergeRate);
+    }
 
-    return smin(d1, d2, u.u_mergeRate);
+    return d;
 }
 
 fn getCoverUV(uv_in: vec2<f32>, canvasAspect: f32, textureAspect: f32) -> vec2<f32> {

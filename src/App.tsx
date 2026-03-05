@@ -58,6 +58,15 @@ import {
 } from './utils/uiContentRenderer';
 import { generateTextSDF, uploadTextSDFTexture, SDF_RANGE } from './utils/textSDF';
 
+// WebGPU imports
+import { WebGPUMultiPassRenderer, isWebGPUAvailable } from './utils/WebGPURenderer';
+import type { WebGPUTextureHandle } from './utils/WebGPURenderer';
+import WGSLVertexShader from './shaders/wgsl/vertex.wgsl?raw';
+import WGSLFragmentBgShader from './shaders/wgsl/fragment-bg.wgsl?raw';
+import WGSLFragmentBgVblurShader from './shaders/wgsl/fragment-bg-vblur.wgsl?raw';
+import WGSLFragmentBgHblurShader from './shaders/wgsl/fragment-bg-hblur.wgsl?raw';
+import WGSLFragmentMainShader from './shaders/wgsl/fragment-main.wgsl?raw';
+
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [canvasInfo, setCanvasInfo] = useState<{ width: number; height: number; dpr: number }>({
@@ -65,6 +74,10 @@ function App() {
     height: Math.max(Math.min(window.innerWidth, window.innerHeight) - 150, 600),
     dpr: 1,
   });
+
+  // Backend selection state
+  const [useWebGPU, setUseWebGPU] = useState(false);
+  const [perfInfo, setPerfInfo] = useState<{ backend: string; fps: number; frameMs: number } | null>(null);
 
   // Editor mode shape state
   const [editorShapes, setEditorShapes] = useState<ShapeDef[]>([]);
@@ -340,6 +353,13 @@ function App() {
   stateRef.current.controls = controls;
   stateRef.current.langName = langName;
 
+  // Sync WebGPU toggle from controls to state (triggers effect re-run)
+  useEffect(() => {
+    if (controls.useWebGPU !== useWebGPU) {
+      setUseWebGPU(controls.useWebGPU);
+    }
+  }, [controls.useWebGPU]);
+
   // Initialize editor shapes when editor mode is first enabled
   const prevEditorMode = useRef(false);
   useEffect(() => {
@@ -429,377 +449,496 @@ function App() {
     };
     canvasEl.addEventListener('pointermove', onPointerMove);
 
+    // ── Backend-agnostic renderer references ──
+    let glRenderer: MultiPassRenderer | null = null;
+    let gpuRenderer: WebGPUMultiPassRenderer | null = null;
     let gl: WebGL2RenderingContext | null = null;
-    try {
-      gl = canvasEl.getContext('webgl2', { colorSpace: 'display-p3' } as WebGLContextAttributes);
-      if (gl) {
-        try {
-          (gl as any).drawingBufferColorSpace = 'display-p3';
-          console.log('[Liquid Glass] 10-bit display-p3 canvas enabled');
-        } catch {
-          console.log('[Liquid Glass] display-p3 drawingBufferColorSpace not supported, using sRGB');
+    const isGPU = useWebGPU && isWebGPUAvailable();
+
+    // WebGPU-specific texture state (lives alongside WebGL state in stateRef)
+    let gpuBgTexture: WebGPUTextureHandle | null = null;
+    let gpuUiContentTexture: WebGPUTextureHandle | null = null;
+    let gpuTextSDFTexture: WebGPUTextureHandle | null = null;
+
+    let disposed = false;
+
+    const initAndRun = async () => {
+      if (disposed) return;
+
+      if (isGPU) {
+        // ── WebGPU backend ──
+        gpuRenderer = new WebGPUMultiPassRenderer(canvasEl);
+        const ok = await gpuRenderer.init([
+          {
+            name: 'bgPass',
+            vertexShader: WGSLVertexShader,
+            fragmentShader: WGSLFragmentBgShader,
+          },
+          {
+            name: 'vBlurPass',
+            vertexShader: WGSLVertexShader,
+            fragmentShader: WGSLFragmentBgVblurShader,
+            inputs: { u_prevPassTexture: 'bgPass' },
+          },
+          {
+            name: 'hBlurPass',
+            vertexShader: WGSLVertexShader,
+            fragmentShader: WGSLFragmentBgHblurShader,
+            inputs: { u_prevPassTexture: 'vBlurPass' },
+          },
+          {
+            name: 'mainPass',
+            vertexShader: WGSLVertexShader,
+            fragmentShader: WGSLFragmentMainShader,
+            inputs: {
+              u_blurredBg: 'hBlurPass',
+              u_bg: 'bgPass',
+            },
+            outputToScreen: true,
+          },
+        ]);
+        if (!ok || disposed) {
+          console.warn('[Liquid Glass] WebGPU init failed, falling back to WebGL2');
+          gpuRenderer?.dispose();
+          gpuRenderer = null;
+          // Fall through to WebGL2
         }
       }
-    } catch {
-      gl = canvasEl.getContext('webgl2');
-    }
-    if (!gl) {
-      return;
-    }
 
-    const renderer = new MultiPassRenderer(canvasEl, [
-      {
-        name: 'bgPass',
-        shader: {
-          vertex: VertexShader,
-          fragment: FragmentBgShader,
-        },
-      },
-      {
-        name: 'vBlurPass',
-        shader: {
-          vertex: VertexShader,
-          fragment: FragmentBgVblurShader,
-        },
-        inputs: {
-          u_prevPassTexture: 'bgPass',
-        },
-      },
-      {
-        name: 'hBlurPass',
-        shader: {
-          vertex: VertexShader,
-          fragment: FragmentBgHblurShader,
-        },
-        inputs: {
-          u_prevPassTexture: 'vBlurPass',
-        },
-      },
-      {
-        name: 'mainPass',
-        shader: {
-          vertex: VertexShader,
-          fragment: FragmentMainShader,
-        },
-        inputs: {
-          u_blurredBg: 'hBlurPass',
-          u_bg: 'bgPass',
-        },
-        outputToScreen: true,
-      },
-    ]);
+      if (!gpuRenderer) {
+        // ── WebGL2 backend ──
+        try {
+          gl = canvasEl.getContext('webgl2', { colorSpace: 'display-p3' } as WebGLContextAttributes);
+          if (gl) {
+            try {
+              (gl as any).drawingBufferColorSpace = 'display-p3';
+              console.log('[Liquid Glass] 10-bit display-p3 canvas enabled');
+            } catch {
+              console.log('[Liquid Glass] display-p3 drawingBufferColorSpace not supported, using sRGB');
+            }
+          }
+        } catch {
+          gl = canvasEl.getContext('webgl2');
+        }
+        if (!gl) return;
 
-    let raf: number | null = null;
-    const lastState = {
-      canvasInfo: null as typeof canvasInfo | null,
-      controls: null as typeof controls | null,
-      bgTextureType: null as typeof stateRef.current.bgTextureType,
-      bgTextureUrl: null as typeof stateRef.current.bgTextureUrl,
-    };
-    const render = () => {
-      raf = requestAnimationFrame(render);
-
-      const now = performance.now();
-      if (!stateRef.current.startTime) {
-        stateRef.current.startTime = now;
-      }
-      const elapsedTime = (now - stateRef.current.startTime) / 1000.0;
-
-      const canvasInfo = stateRef.current.canvasInfo;
-      const textureUrl = stateRef.current.bgTextureUrl;
-      if (
-        !lastState.canvasInfo ||
-        lastState.canvasInfo.width !== canvasInfo.width ||
-        lastState.canvasInfo.height !== canvasInfo.height ||
-        lastState.canvasInfo.dpr !== canvasInfo.dpr
-      ) {
-        gl.viewport(
-          0,
-          0,
-          Math.round(canvasInfo.width * canvasInfo.dpr),
-          Math.round(canvasInfo.height * canvasInfo.dpr),
-        );
-        renderer.resize(canvasInfo.width * canvasInfo.dpr, canvasInfo.height * canvasInfo.dpr);
-        renderer.setUniform('u_resolution', [
-          canvasInfo.width * canvasInfo.dpr,
-          canvasInfo.height * canvasInfo.dpr,
+        glRenderer = new MultiPassRenderer(canvasEl, [
+          {
+            name: 'bgPass',
+            shader: { vertex: VertexShader, fragment: FragmentBgShader },
+          },
+          {
+            name: 'vBlurPass',
+            shader: { vertex: VertexShader, fragment: FragmentBgVblurShader },
+            inputs: { u_prevPassTexture: 'bgPass' },
+          },
+          {
+            name: 'hBlurPass',
+            shader: { vertex: VertexShader, fragment: FragmentBgHblurShader },
+            inputs: { u_prevPassTexture: 'vBlurPass' },
+          },
+          {
+            name: 'mainPass',
+            shader: { vertex: VertexShader, fragment: FragmentMainShader },
+            inputs: { u_blurredBg: 'hBlurPass', u_bg: 'bgPass' },
+            outputToScreen: true,
+          },
         ]);
       }
-      if (textureUrl !== lastState.bgTextureUrl) {
-        if (lastState.bgTextureType === 'video') {
-          if (lastState.controls?.bgType !== undefined) {
-            stateRef.current.bgVideoEls.get(lastState.controls.bgType)?.pause();
-          }
+
+      if (disposed) return;
+
+      // Helper: current renderer API
+      const renderer = gpuRenderer ?? glRenderer!;
+      const isWebGPUActive = !!gpuRenderer;
+      const backendLabel = isWebGPUActive ? 'WebGPU' : 'WebGL2';
+
+      // FPS tracking with frame time
+      let fpsFrameCount = 0;
+      let fpsLastTime = performance.now();
+      let frameMsAccum = 0;
+      let lastFrameTime = performance.now();
+      const updatePerfInfo = (now: number) => {
+        const dt = now - lastFrameTime;
+        lastFrameTime = now;
+        frameMsAccum += dt;
+        fpsFrameCount++;
+        if (now - fpsLastTime >= 1000) {
+          const fps = Math.round(fpsFrameCount * 1000 / (now - fpsLastTime));
+          const avgMs = +(frameMsAccum / fpsFrameCount).toFixed(2);
+          setPerfInfo({ backend: backendLabel, fps, frameMs: avgMs });
+          fpsFrameCount = 0;
+          frameMsAccum = 0;
+          fpsLastTime = now;
         }
-        if (!textureUrl) {
-          if (stateRef.current.bgTexture) {
-            gl.deleteTexture(stateRef.current.bgTexture);
-            stateRef.current.bgTexture = null;
-            stateRef.current.bgTextureType = null;
-            stateRef.current.isHDRContent = false;
-          }
-        } else {
-          if (stateRef.current.bgTextureType === 'image') {
-            stateRef.current.isHDRContent = false;
-            const rafId = requestAnimationFrame(() => {
-              stateRef.current.bgTextureReady = false;
-            });
-            loadTextureFromURL(gl, textureUrl).then(({ texture, ratio }) => {
-              if (stateRef.current.bgTextureUrl === textureUrl) {
-                cancelAnimationFrame(rafId);
-                stateRef.current.bgTexture = texture;
-                stateRef.current.bgTextureRatio = ratio;
-                stateRef.current.bgTextureReady = true;
-              }
-            });
-          } else if (stateRef.current.bgTextureType === 'video') {
-            stateRef.current.isHDRContent = false;
-            stateRef.current.bgTextureReady = false;
-            stateRef.current.bgTexture = createEmptyTexture(gl);
-            stateRef.current.bgVideoEls.get(stateRef.current.controls.bgType)?.play();
-          } else if (stateRef.current.bgTextureType === 'hdr' && stateRef.current.hdrFile) {
-            stateRef.current.bgTextureReady = false;
-            stateRef.current.isHDRContent = true;
-            const hdrFile = stateRef.current.hdrFile;
-            loadHDRFile(hdrFile).then((hdrData) => {
-              if (stateRef.current.bgTextureUrl === textureUrl) {
-                const { texture, ratio } = createHDRTexture(gl, hdrData);
-                stateRef.current.bgTexture = texture;
-                stateRef.current.bgTextureRatio = ratio;
-                stateRef.current.bgTextureReady = true;
-                // Auto-enable HDR mode for HDR content
-                controlsAPI.set({ hdrEnabled: true, hdrToneMappingType: 2 });
-              }
-            }).catch((err) => {
-              console.error('[Liquid Glass] Failed to load HDR file:', err);
-            });
-          }
-        }
-      }
-      lastState.controls = stateRef.current.controls;
-      lastState.bgTextureType = stateRef.current.bgTextureType;
-      lastState.canvasInfo = canvasInfo;
-      lastState.bgTextureUrl = stateRef.current.bgTextureUrl;
-
-      if (stateRef.current.bgTextureType === 'video') {
-        const videoEl = stateRef.current.bgVideoEls.get(stateRef.current.controls.bgType);
-        if (stateRef.current.bgTexture && videoEl) {
-          const info = updateVideoTexture(gl, stateRef.current.bgTexture, videoEl);
-
-          if (info) {
-            stateRef.current.bgTextureRatio = info.ratio;
-            stateRef.current.bgTextureReady = true;
-          }
-        }
-      }
-
-      gl.clearColor(0, 0, 0, 0);
-      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-      const controls = stateRef.current.controls;
-      const mouseSpring = stateRef.current.mouseSpring.get();
-
-      const shapeSizeSpring = {
-        x:
-          controls.shapeWidth +
-          (Math.abs(stateRef.current.mouseSpringSpeed.x) *
-            controls.shapeWidth *
-            controls.springSizeFactor) /
-          100,
-        y:
-          controls.shapeHeight +
-          (Math.abs(stateRef.current.mouseSpringSpeed.y) *
-            controls.shapeHeight *
-            controls.springSizeFactor) /
-          100,
       };
 
-      // Build shape uniforms for editor mode
-      const editorShapes = editorShapesRef.current;
-      const isEditorMode = controls.editorMode && editorShapes.length > 0;
+      let raf: number | null = null;
+      const lastState = {
+        canvasInfo: null as typeof canvasInfo | null,
+        controls: null as typeof controls | null,
+        bgTextureType: null as typeof stateRef.current.bgTextureType,
+        bgTextureUrl: null as typeof stateRef.current.bgTextureUrl,
+      };
 
-      // Prepare shape arrays for uniforms (up to 8 shapes)
-      // Each shape: vec4(x, y, width, height) in canvas pixel coords
-      // Params: vec2(radius, roundness) per shape
-      const shapeData: number[] = [];
-      const shapeParamsData: number[] = [];
-      if (isEditorMode) {
-        for (let i = 0; i < 8; i++) {
-          if (i < editorShapes.length) {
-            const s = editorShapes[i];
-            // Convert from CSS coords (origin top-left) to shader coords (origin bottom-left)
-            const sx = s.x * canvasInfo.dpr;
-            const sy = (canvasInfo.height - s.y) * canvasInfo.dpr;
-            const sw = s.width * canvasInfo.dpr;
-            const sh = s.height * canvasInfo.dpr;
-            const sr =
-              ((Math.min(sw, sh) / 2) * s.radius) / 100;
-            shapeData.push(sx, sy, sw, sh);
-            shapeParamsData.push(sr, s.roundness);
+      const render = () => {
+        if (disposed) return;
+        raf = requestAnimationFrame(render);
+
+        const now = performance.now();
+        updatePerfInfo(now);
+        if (!stateRef.current.startTime) {
+          stateRef.current.startTime = now;
+        }
+        const elapsedTime = (now - stateRef.current.startTime) / 1000.0;
+
+        const canvasInfo = stateRef.current.canvasInfo;
+        const textureUrl = stateRef.current.bgTextureUrl;
+
+        if (
+          !lastState.canvasInfo ||
+          lastState.canvasInfo.width !== canvasInfo.width ||
+          lastState.canvasInfo.height !== canvasInfo.height ||
+          lastState.canvasInfo.dpr !== canvasInfo.dpr
+        ) {
+          if (gl && !isWebGPUActive) {
+            gl.viewport(0, 0,
+              Math.round(canvasInfo.width * canvasInfo.dpr),
+              Math.round(canvasInfo.height * canvasInfo.dpr));
+          }
+          renderer.resize(canvasInfo.width * canvasInfo.dpr, canvasInfo.height * canvasInfo.dpr);
+          renderer.setUniform('u_resolution', [
+            canvasInfo.width * canvasInfo.dpr,
+            canvasInfo.height * canvasInfo.dpr,
+          ]);
+        }
+
+        // ── Texture loading ──
+        if (textureUrl !== lastState.bgTextureUrl) {
+          if (lastState.bgTextureType === 'video') {
+            if (lastState.controls?.bgType !== undefined) {
+              stateRef.current.bgVideoEls.get(lastState.controls.bgType)?.pause();
+            }
+          }
+          if (!textureUrl) {
+            if (isWebGPUActive) {
+              gpuBgTexture = null;
+            } else if (stateRef.current.bgTexture) {
+              gl!.deleteTexture(stateRef.current.bgTexture);
+              stateRef.current.bgTexture = null;
+            }
+            stateRef.current.bgTextureType = null;
+            stateRef.current.isHDRContent = false;
+            stateRef.current.bgTextureReady = false;
           } else {
-            shapeData.push(0, 0, 0, 0);
-            shapeParamsData.push(0, 2);
+            if (stateRef.current.bgTextureType === 'image') {
+              stateRef.current.isHDRContent = false;
+              stateRef.current.bgTextureReady = false;
+              if (isWebGPUActive) {
+                gpuRenderer!.loadTexture(textureUrl).then(({ handle, ratio }) => {
+                  if (stateRef.current.bgTextureUrl === textureUrl) {
+                    gpuBgTexture = handle;
+                    stateRef.current.bgTextureRatio = ratio;
+                    stateRef.current.bgTextureReady = true;
+                  }
+                });
+              } else {
+                const rafId = requestAnimationFrame(() => { stateRef.current.bgTextureReady = false; });
+                loadTextureFromURL(gl!, textureUrl).then(({ texture, ratio }) => {
+                  if (stateRef.current.bgTextureUrl === textureUrl) {
+                    cancelAnimationFrame(rafId);
+                    stateRef.current.bgTexture = texture;
+                    stateRef.current.bgTextureRatio = ratio;
+                    stateRef.current.bgTextureReady = true;
+                  }
+                });
+              }
+            } else if (stateRef.current.bgTextureType === 'video') {
+              stateRef.current.isHDRContent = false;
+              stateRef.current.bgTextureReady = false;
+              if (!isWebGPUActive) {
+                stateRef.current.bgTexture = createEmptyTexture(gl!);
+              }
+              stateRef.current.bgVideoEls.get(stateRef.current.controls.bgType)?.play();
+            } else if (stateRef.current.bgTextureType === 'hdr' && stateRef.current.hdrFile) {
+              stateRef.current.bgTextureReady = false;
+              stateRef.current.isHDRContent = true;
+              const hdrFile = stateRef.current.hdrFile;
+              loadHDRFile(hdrFile).then((hdrData) => {
+                if (stateRef.current.bgTextureUrl === textureUrl) {
+                  if (isWebGPUActive) {
+                    const { handle, ratio } = gpuRenderer!.createHDRTexture(hdrData);
+                    gpuBgTexture = handle;
+                    stateRef.current.bgTextureRatio = ratio;
+                  } else {
+                    const { texture, ratio } = createHDRTexture(gl!, hdrData);
+                    stateRef.current.bgTexture = texture;
+                    stateRef.current.bgTextureRatio = ratio;
+                  }
+                  stateRef.current.bgTextureReady = true;
+                  controlsAPI.set({ hdrEnabled: true, hdrToneMappingType: 2 });
+                }
+              }).catch((err) => {
+                console.error('[Liquid Glass] Failed to load HDR file:', err);
+              });
+            }
           }
         }
-      }
+        lastState.controls = stateRef.current.controls;
+        lastState.bgTextureType = stateRef.current.bgTextureType;
+        lastState.canvasInfo = canvasInfo;
+        lastState.bgTextureUrl = stateRef.current.bgTextureUrl;
 
-      renderer.setUniforms({
-        u_resolution: [canvasInfo.width * canvasInfo.dpr, canvasInfo.height * canvasInfo.dpr],
-        u_dpr: canvasInfo.dpr,
-        u_blurWeights: stateRef.current.blurWeights,
-        u_blurRadius: stateRef.current.controls.blurRadius,
-        u_mouse: [stateRef.current.canvasPointerPos.x, stateRef.current.canvasPointerPos.y],
-        u_mouseSpring: isEditorMode ? [0, 0] : [mouseSpring.x, mouseSpring.y],
-        u_shapeWidth: shapeSizeSpring.x,
-        u_shapeHeight: shapeSizeSpring.y,
-        u_shapeRadius:
-          ((Math.min(shapeSizeSpring.x, shapeSizeSpring.y) / 2) * controls.shapeRadius) / 100,
-        u_shapeRoundness: controls.shapeRoundness,
-        u_mergeRate: controls.mergeRate,
-        u_glareAngle: (controls.glareAngle * Math.PI) / 180,
-        u_showShape1: controls.showShape1 && !controls.textEnabled ? 1 : 0,
-        u_shapeCount: isEditorMode ? editorShapes.length : 0,
-        u_shapes: isEditorMode ? shapeData : new Array(32).fill(0),
-        u_shapeParams: isEditorMode ? shapeParamsData : new Array(16).fill(0),
-      });
-
-      // UI Content rendering
-      if (controls.uiContentEnabled) {
-        const cw = Math.round(canvasInfo.width * canvasInfo.dpr);
-        const ch = Math.round(canvasInfo.height * canvasInfo.dpr);
-        if (
-          !stateRef.current.uiContentCanvas ||
-          stateRef.current.uiContentCanvas.width !== cw ||
-          stateRef.current.uiContentCanvas.height !== ch
-        ) {
-          stateRef.current.uiContentCanvas = createUIContentCanvas(cw, ch);
+        // Video frame update
+        if (stateRef.current.bgTextureType === 'video') {
+          const videoEl = stateRef.current.bgVideoEls.get(stateRef.current.controls.bgType);
+          if (videoEl) {
+            if (isWebGPUActive) {
+              const result = gpuRenderer!.updateVideoTexture(gpuBgTexture, videoEl);
+              if (result) {
+                gpuBgTexture = result.handle;
+                stateRef.current.bgTextureRatio = result.ratio;
+                stateRef.current.bgTextureReady = true;
+              }
+            } else if (stateRef.current.bgTexture) {
+              const info = updateVideoTexture(gl!, stateRef.current.bgTexture, videoEl);
+              if (info) {
+                stateRef.current.bgTextureRatio = info.ratio;
+                stateRef.current.bgTextureReady = true;
+              }
+            }
+          }
         }
-        renderUIContent(
-          stateRef.current.uiContentCanvas,
-          controls.uiContentType as UIContentType,
-          { text: controls.uiContentText },
-        );
-        stateRef.current.uiContentTexture = uploadCanvasTexture(
-          gl,
-          stateRef.current.uiContentCanvas,
-          stateRef.current.uiContentTexture,
-        );
-      }
 
-      // Text SDF generation
-      if (
-        controls.textEnabled !== stateRef.current.lastTextEnabled ||
-        controls.textContent !== stateRef.current.lastTextContent ||
-        controls.textSize !== stateRef.current.lastTextSize ||
-        controls.textFont !== stateRef.current.lastTextFont ||
-        controls.textSuperSample !== stateRef.current.lastTextSuperSample ||
-        stateRef.current.lastTextCanvasWidth !== canvasInfo.width ||
-        stateRef.current.lastTextCanvasHeight !== canvasInfo.height ||
-        stateRef.current.lastTextCanvasDpr !== canvasInfo.dpr
-      ) {
-        stateRef.current.textSDFDirty = true;
-        stateRef.current.lastTextEnabled = controls.textEnabled;
-        stateRef.current.lastTextContent = controls.textContent;
-        stateRef.current.lastTextSize = controls.textSize;
-        stateRef.current.lastTextFont = controls.textFont;
-        stateRef.current.lastTextSuperSample = controls.textSuperSample;
-        stateRef.current.lastTextCanvasWidth = canvasInfo.width;
-        stateRef.current.lastTextCanvasHeight = canvasInfo.height;
-        stateRef.current.lastTextCanvasDpr = canvasInfo.dpr;
-      }
+        if (gl && !isWebGPUActive) {
+          gl.clearColor(0, 0, 0, 0);
+          gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        }
 
-      if (controls.textEnabled && stateRef.current.textSDFDirty) {
-        const sdfWidth = Math.round(canvasInfo.width * canvasInfo.dpr);
-        const sdfHeight = Math.round(canvasInfo.height * canvasInfo.dpr);
-        const sdfResult = generateTextSDF(
-          controls.textContent,
-          controls.textSize * canvasInfo.dpr,
-          controls.textFont,
-          sdfWidth,
-          sdfHeight,
-          controls.textSuperSample,
-        );
-        stateRef.current.textSDFTexture = uploadTextSDFTexture(
-          gl,
-          sdfResult,
-          stateRef.current.textSDFTexture,
-        );
-        stateRef.current.textSDFDirty = false;
-      }
+        const controls = stateRef.current.controls;
+        const mouseSpring = stateRef.current.mouseSpring.get();
 
-      const textSDFTexture = controls.textEnabled && stateRef.current.textSDFTexture
-        ? stateRef.current.textSDFTexture
-        : undefined;
+        const shapeSizeSpring = {
+          x: controls.shapeWidth +
+            (Math.abs(stateRef.current.mouseSpringSpeed.x) * controls.shapeWidth * controls.springSizeFactor) / 100,
+          y: controls.shapeHeight +
+            (Math.abs(stateRef.current.mouseSpringSpeed.y) * controls.shapeHeight * controls.springSizeFactor) / 100,
+        };
 
-      renderer.render({
-        bgPass: {
-          u_bgType: controls.bgType,
-          u_bgTexture: (stateRef.current.bgTextureUrl && stateRef.current.bgTexture) ?? undefined,
-          u_bgTextureRatio:
-            stateRef.current.bgTextureUrl && stateRef.current.bgTexture
-              ? stateRef.current.bgTextureRatio
-              : undefined,
-          u_bgTextureReady: stateRef.current.bgTextureReady ? 1 : 0,
-          u_shadowExpand: controls.shadowExpand,
-          u_shadowFactor: controls.shadowFactor / 100,
-          u_shadowPosition: [-controls.shadowPosition.x, -controls.shadowPosition.y],
-          u_textSDF: textSDFTexture,
-          u_textEnabled: controls.textEnabled ? 1 : 0,
-          u_textScale: 2 * SDF_RANGE,
-        },
-        mainPass: {
-          u_tint: [
-            controls.tint.r / 255,
-            controls.tint.g / 255,
-            controls.tint.b / 255,
-            controls.tint.a,
-          ],
-          u_refThickness: controls.refThickness,
-          u_refFactor: controls.refFactor,
-          u_refDispersion: controls.refDispersion,
-          u_refFresnelRange: controls.refFresnelRange,
-          u_refFresnelHardness: controls.refFresnelHardness / 100,
-          u_refFresnelFactor: controls.refFresnelFactor / 100,
-          u_glareRange: controls.glareRange,
-          u_glareHardness: controls.glareHardness / 100,
-          u_glareConvergence: controls.glareConvergence / 100,
-          u_glareOppositeFactor: controls.glareOppositeFactor / 100,
-          u_glareFactor: controls.glareFactor / 100,
-          u_blurEdge: controls.blurEdge ? 1 : 0,
-          u_uiContentEnabled: controls.uiContentEnabled ? 1 : 0,
-          u_uiContentOpacity: controls.uiContentOpacity / 100,
-          u_uiContent: controls.uiContentEnabled && stateRef.current.uiContentTexture
-            ? stateRef.current.uiContentTexture
-            : undefined,
-          u_emissiveColor: [
-            controls.emissiveColor.r / 255,
-            controls.emissiveColor.g / 255,
-            controls.emissiveColor.b / 255,
-          ],
-          u_emissiveIntensity: controls.emissiveIntensity / 100,
-          u_emissivePulse: controls.emissivePulse
-            ? Math.sin(elapsedTime * 2.0) * 0.5 + 0.5
-            : 0.0,
-          u_hdrEnabled: controls.hdrEnabled ? 1 : 0,
-          u_exposure: controls.hdrExposure,
-          u_toneMappingType: controls.hdrToneMappingType,
-          u_bloom: controls.hdrBloom,
-          u_textSDF: textSDFTexture,
-          u_textEnabled: controls.textEnabled ? 1 : 0,
-          u_textScale: 2 * SDF_RANGE,
-          STEP: controls.step,
-        },
-      });
+        const editorShapes = editorShapesRef.current;
+        const isEditorMode = controls.editorMode && editorShapes.length > 0;
+
+        const shapeData: number[] = [];
+        const shapeParamsData: number[] = [];
+        if (isEditorMode) {
+          for (let i = 0; i < 8; i++) {
+            if (i < editorShapes.length) {
+              const s = editorShapes[i];
+              const sx = s.x * canvasInfo.dpr;
+              const sy = (canvasInfo.height - s.y) * canvasInfo.dpr;
+              const sw = s.width * canvasInfo.dpr;
+              const sh = s.height * canvasInfo.dpr;
+              const sr = ((Math.min(sw, sh) / 2) * s.radius) / 100;
+              shapeData.push(sx, sy, sw, sh);
+              shapeParamsData.push(sr, s.roundness);
+            } else {
+              shapeData.push(0, 0, 0, 0);
+              shapeParamsData.push(0, 2);
+            }
+          }
+        }
+
+        renderer.setUniforms({
+          u_resolution: [canvasInfo.width * canvasInfo.dpr, canvasInfo.height * canvasInfo.dpr],
+          u_dpr: canvasInfo.dpr,
+          u_blurWeights: stateRef.current.blurWeights,
+          u_blurRadius: stateRef.current.controls.blurRadius,
+          u_mouse: [stateRef.current.canvasPointerPos.x, stateRef.current.canvasPointerPos.y],
+          u_mouseSpring: isEditorMode ? [0, 0] : [mouseSpring.x, mouseSpring.y],
+          u_shapeWidth: shapeSizeSpring.x,
+          u_shapeHeight: shapeSizeSpring.y,
+          u_shapeRadius:
+            ((Math.min(shapeSizeSpring.x, shapeSizeSpring.y) / 2) * controls.shapeRadius) / 100,
+          u_shapeRoundness: controls.shapeRoundness,
+          u_mergeRate: controls.mergeRate,
+          u_glareAngle: (controls.glareAngle * Math.PI) / 180,
+          u_showShape1: controls.showShape1 && !controls.textEnabled ? 1 : 0,
+          u_shapeCount: isEditorMode ? editorShapes.length : 0,
+          u_shapes: isEditorMode ? shapeData : new Array(32).fill(0),
+          u_shapeParams: isEditorMode ? shapeParamsData : new Array(16).fill(0),
+        });
+
+        // UI Content rendering
+        if (controls.uiContentEnabled) {
+          const cw = Math.round(canvasInfo.width * canvasInfo.dpr);
+          const ch = Math.round(canvasInfo.height * canvasInfo.dpr);
+          if (
+            !stateRef.current.uiContentCanvas ||
+            stateRef.current.uiContentCanvas.width !== cw ||
+            stateRef.current.uiContentCanvas.height !== ch
+          ) {
+            stateRef.current.uiContentCanvas = createUIContentCanvas(cw, ch);
+          }
+          renderUIContent(
+            stateRef.current.uiContentCanvas,
+            controls.uiContentType as UIContentType,
+            { text: controls.uiContentText },
+          );
+          if (isWebGPUActive) {
+            gpuUiContentTexture = gpuRenderer!.uploadCanvasTexture(
+              stateRef.current.uiContentCanvas,
+              gpuUiContentTexture,
+            );
+          } else {
+            stateRef.current.uiContentTexture = uploadCanvasTexture(
+              gl!,
+              stateRef.current.uiContentCanvas,
+              stateRef.current.uiContentTexture,
+            );
+          }
+        }
+
+        // Text SDF generation
+        if (
+          controls.textEnabled !== stateRef.current.lastTextEnabled ||
+          controls.textContent !== stateRef.current.lastTextContent ||
+          controls.textSize !== stateRef.current.lastTextSize ||
+          controls.textFont !== stateRef.current.lastTextFont ||
+          controls.textSuperSample !== stateRef.current.lastTextSuperSample ||
+          stateRef.current.lastTextCanvasWidth !== canvasInfo.width ||
+          stateRef.current.lastTextCanvasHeight !== canvasInfo.height ||
+          stateRef.current.lastTextCanvasDpr !== canvasInfo.dpr
+        ) {
+          stateRef.current.textSDFDirty = true;
+          stateRef.current.lastTextEnabled = controls.textEnabled;
+          stateRef.current.lastTextContent = controls.textContent;
+          stateRef.current.lastTextSize = controls.textSize;
+          stateRef.current.lastTextFont = controls.textFont;
+          stateRef.current.lastTextSuperSample = controls.textSuperSample;
+          stateRef.current.lastTextCanvasWidth = canvasInfo.width;
+          stateRef.current.lastTextCanvasHeight = canvasInfo.height;
+          stateRef.current.lastTextCanvasDpr = canvasInfo.dpr;
+        }
+
+        if (controls.textEnabled && stateRef.current.textSDFDirty) {
+          const sdfWidth = Math.round(canvasInfo.width * canvasInfo.dpr);
+          const sdfHeight = Math.round(canvasInfo.height * canvasInfo.dpr);
+          const sdfResult = generateTextSDF(
+            controls.textContent,
+            controls.textSize * canvasInfo.dpr,
+            controls.textFont,
+            sdfWidth,
+            sdfHeight,
+            controls.textSuperSample,
+          );
+          if (isWebGPUActive) {
+            gpuTextSDFTexture = gpuRenderer!.uploadTextSDFTexture(sdfResult, gpuTextSDFTexture);
+          } else {
+            stateRef.current.textSDFTexture = uploadTextSDFTexture(
+              gl!,
+              sdfResult,
+              stateRef.current.textSDFTexture,
+            );
+          }
+          stateRef.current.textSDFDirty = false;
+        }
+
+        // Build texture uniforms based on backend
+        let textSDFTexture: any;
+        let bgTexture: any;
+        let uiContentTexture: any;
+        if (isWebGPUActive) {
+          textSDFTexture = controls.textEnabled && gpuTextSDFTexture ? gpuTextSDFTexture : undefined;
+          bgTexture = stateRef.current.bgTextureUrl && gpuBgTexture ? gpuBgTexture : undefined;
+          uiContentTexture = controls.uiContentEnabled && gpuUiContentTexture ? gpuUiContentTexture : undefined;
+        } else {
+          textSDFTexture = controls.textEnabled && stateRef.current.textSDFTexture
+            ? stateRef.current.textSDFTexture : undefined;
+          bgTexture = (stateRef.current.bgTextureUrl && stateRef.current.bgTexture) ?? undefined;
+          uiContentTexture = controls.uiContentEnabled && stateRef.current.uiContentTexture
+            ? stateRef.current.uiContentTexture : undefined;
+        }
+
+        renderer.render({
+          bgPass: {
+            u_bgType: controls.bgType,
+            u_bgTexture: bgTexture,
+            u_bgTextureRatio: stateRef.current.bgTextureUrl && stateRef.current.bgTextureReady
+              ? stateRef.current.bgTextureRatio : undefined,
+            u_bgTextureReady: stateRef.current.bgTextureReady ? 1 : 0,
+            u_shadowExpand: controls.shadowExpand,
+            u_shadowFactor: controls.shadowFactor / 100,
+            u_shadowPosition: [-controls.shadowPosition.x, -controls.shadowPosition.y],
+            u_textSDF: textSDFTexture,
+            u_textEnabled: controls.textEnabled ? 1 : 0,
+            u_textScale: 2 * SDF_RANGE,
+          },
+          mainPass: {
+            u_tint: [
+              controls.tint.r / 255,
+              controls.tint.g / 255,
+              controls.tint.b / 255,
+              controls.tint.a,
+            ],
+            u_refThickness: controls.refThickness,
+            u_refFactor: controls.refFactor,
+            u_refDispersion: controls.refDispersion,
+            u_refFresnelRange: controls.refFresnelRange,
+            u_refFresnelHardness: controls.refFresnelHardness / 100,
+            u_refFresnelFactor: controls.refFresnelFactor / 100,
+            u_glareRange: controls.glareRange,
+            u_glareHardness: controls.glareHardness / 100,
+            u_glareConvergence: controls.glareConvergence / 100,
+            u_glareOppositeFactor: controls.glareOppositeFactor / 100,
+            u_glareFactor: controls.glareFactor / 100,
+            u_blurEdge: controls.blurEdge ? 1 : 0,
+            u_uiContentEnabled: controls.uiContentEnabled ? 1 : 0,
+            u_uiContentOpacity: controls.uiContentOpacity / 100,
+            u_uiContent: uiContentTexture,
+            u_emissiveColor: [
+              controls.emissiveColor.r / 255,
+              controls.emissiveColor.g / 255,
+              controls.emissiveColor.b / 255,
+            ],
+            u_emissiveIntensity: controls.emissiveIntensity / 100,
+            u_emissivePulse: controls.emissivePulse
+              ? Math.sin(elapsedTime * 2.0) * 0.5 + 0.5
+              : 0.0,
+            u_hdrEnabled: controls.hdrEnabled ? 1 : 0,
+            u_exposure: controls.hdrExposure,
+            u_toneMappingType: controls.hdrToneMappingType,
+            u_bloom: controls.hdrBloom,
+            u_textSDF: textSDFTexture,
+            u_textEnabled: controls.textEnabled ? 1 : 0,
+            u_textScale: 2 * SDF_RANGE,
+            STEP: controls.step,
+          },
+        });
+      };
+
+      raf = requestAnimationFrame(render);
+      stateRef.current.renderRaf = raf;
     };
-    raf = requestAnimationFrame(render);
+
+    initAndRun();
 
     return () => {
+      disposed = true;
       canvasEl.removeEventListener('pointermove', onPointerMove);
-      if (raf) {
-        cancelAnimationFrame(raf);
+      if (stateRef.current.renderRaf) {
+        cancelAnimationFrame(stateRef.current.renderRaf);
+        stateRef.current.renderRaf = null;
       }
+      gpuRenderer?.dispose();
+      glRenderer?.dispose();
+      // Reset texture state for clean re-init
+      stateRef.current.bgTexture = null;
+      stateRef.current.bgTextureReady = false;
+      stateRef.current.uiContentTexture = null;
+      stateRef.current.textSDFTexture = null;
+      stateRef.current.textSDFDirty = true;
     };
-  }, []);
+  }, [useWebGPU]);
 
   return (
     <>
@@ -861,6 +1000,13 @@ function App() {
               } as CSSProperties
             }
           />
+          {perfInfo && (
+            <div className={styles.perfOverlay}>
+              <span className={styles.perfBackend}>{perfInfo.backend}</span>
+              <span>{perfInfo.fps} FPS</span>
+              <span>{perfInfo.frameMs}ms</span>
+            </div>
+          )}
           {controls.editorMode && (
             <EditorMode
               shapes={editorShapes}
