@@ -135,3 +135,59 @@
   opacity: 0.5;
   font-size: 10px;
 }
+
+.shapeProps {
+  padding: 4px 8px 8px;
+  background: rgba(80, 140, 255, 0.08);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.shapeTypeRow {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.shapeTypeBtn {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 12px;
+  padding: 3px 0;
+  cursor: pointer;
+  transition: all 0.12s;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+  }
+}
+
+.shapeTypeBtnActive {
+  background: rgba(80, 140, 255, 0.4);
+  border-color: rgba(80, 140, 255, 0.7);
+  color: white;
+}
+
+.shapePropLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.6);
+  margin-top: 3px;
+
+  span {
+    min-width: 52px;
+    flex-shrink: 0;
+  }
+
+  input[type='range'] {
+    flex: 1;
+    height: 3px;
+    accent-color: rgb(80, 140, 255);
+    cursor: pointer;
+  }
+}

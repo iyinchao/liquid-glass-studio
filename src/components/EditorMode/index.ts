@@ -1,2 +1,2 @@
-export { EditorMode, createDefaultShape, generateShapeId } from './EditorMode';
-export type { ShapeDef } from './EditorMode';
+export { EditorMode, createDefaultShape, generateShapeId, SHAPE_TYPE_INDEX } from './EditorMode';
+export type { ShapeDef, ShapeType } from './EditorMode';

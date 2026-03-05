@@ -29,7 +29,7 @@ import { Controller } from '@react-spring/web';
 // import { useResizeObserver } from './utils/useResizeOberver';
 import clsx from 'clsx';
 import { capitalize, computeGaussianKernelByRadius } from './utils';
-import { EditorMode, createDefaultShape } from './components/EditorMode';
+import { EditorMode, createDefaultShape, SHAPE_TYPE_INDEX } from './components/EditorMode';
 import type { ShapeDef } from './components/EditorMode';
 
 import bgGrid from '@/assets/bg-grid.png';
@@ -739,11 +739,12 @@ function App() {
               const sw = s.width * canvasInfo.dpr;
               const sh = s.height * canvasInfo.dpr;
               const sr = ((Math.min(sw, sh) / 2) * s.radius) / 100;
+              const shapeTypeIdx = SHAPE_TYPE_INDEX[s.type] ?? 0;
               shapeData.push(sx, sy, sw, sh);
-              shapeParamsData.push(sr, s.roundness);
+              shapeParamsData.push(sr, s.roundness, shapeTypeIdx, 0);
             } else {
               shapeData.push(0, 0, 0, 0);
-              shapeParamsData.push(0, 2);
+              shapeParamsData.push(0, 2, 0, 0);
             }
           }
         }
@@ -765,7 +766,7 @@ function App() {
           u_showShape1: controls.showShape1 && !controls.textEnabled ? 1 : 0,
           u_shapeCount: isEditorMode ? editorShapes.length : 0,
           u_shapes: isEditorMode ? shapeData : new Array(32).fill(0),
-          u_shapeParams: isEditorMode ? shapeParamsData : new Array(16).fill(0),
+          u_shapeParams: isEditorMode ? shapeParamsData : new Array(32).fill(0),
         });
 
         // UI Content rendering

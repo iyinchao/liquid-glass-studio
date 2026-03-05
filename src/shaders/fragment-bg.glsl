@@ -26,7 +26,7 @@ uniform int u_showShape1;
 
 uniform int u_shapeCount;
 uniform vec4 u_shapes[8]; // x, y, width, height per shape
-uniform vec2 u_shapeParams[8]; // radius, roundness per shape
+uniform vec4 u_shapeParams[8]; // radius, roundness, shapeType, unused per shape
 
 uniform sampler2D u_textSDF;
 uniform int u_textEnabled;
@@ -93,6 +93,59 @@ float smin(float a, float b, float k) {
   return mix(b, a, h) - k * h * (1.0 - h);
 }
 
+float sdEllipse(vec2 p, vec2 r) {
+  vec2 k = p / r;
+  return (length(k) - 1.0) * min(r.x, r.y);
+}
+
+float sdTriangle(vec2 p, float r) {
+  const float k = sqrt(3.0);
+  p.x = abs(p.x) - r;
+  p.y = p.y + r / k;
+  if (p.x + k * p.y > 0.0) p = vec2(p.x - k * p.y, -k * p.x - p.y) / 2.0;
+  p.x -= clamp(p.x, -2.0 * r, 0.0);
+  return -length(p) * sign(p.y);
+}
+
+float sdStar(vec2 p, float r, float rf) {
+  const vec2 k1 = vec2(0.809016994375, -0.587785252292);
+  const vec2 k2 = vec2(-k1.x, k1.y);
+  p.x = abs(p.x);
+  p -= 2.0 * max(dot(k1, p), 0.0) * k1;
+  p -= 2.0 * max(dot(k2, p), 0.0) * k2;
+  p.x = abs(p.x);
+  p.y -= r;
+  vec2 ba = rf * vec2(-k1.y, k1.x) - vec2(0, 1);
+  float h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+  return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+}
+
+float sdHexagon(vec2 p, float r) {
+  const vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
+  p = abs(p);
+  p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
+  p -= vec2(clamp(p.x, -k.z * r, k.z * r), r);
+  return length(p) * sign(p.y);
+}
+
+float shapeSDF(vec2 pn, float shapeW, float shapeH, float shapeR, float shapeN, int shapeType) {
+  float rY = u_resolution.y;
+  if (shapeType == 1) {
+    return sdEllipse(pn, vec2(shapeW * u_dpr * 0.5, shapeH * u_dpr * 0.5) / rY);
+  } else if (shapeType == 2) {
+    float s = min(shapeW, shapeH) * u_dpr * 0.5 / rY;
+    return sdTriangle(pn, s);
+  } else if (shapeType == 3) {
+    float s = min(shapeW, shapeH) * u_dpr * 0.5 / rY;
+    return sdStar(pn, s, 0.45);
+  } else if (shapeType == 4) {
+    float s = min(shapeW, shapeH) * u_dpr * 0.5 / rY;
+    return sdHexagon(pn, s);
+  } else {
+    return roundedRectSDF(pn, vec2(0.0), shapeW / rY, shapeH / rY, shapeR / rY, shapeN);
+  }
+}
+
 float sdgMin(float a, float b) {
   return a < b
     ? a
@@ -111,15 +164,9 @@ float mainSDF(vec2 p1, vec2 p2, vec2 p) {
       float shapeH = u_shapes[i].w;
       float shapeR = u_shapeParams[i].x;
       float shapeN = u_shapeParams[i].y;
+      int shapeType = int(u_shapeParams[i].z);
       vec2 pn = (-shapeCenter) / u_resolution.y + p / u_resolution.y;
-      float dd = roundedRectSDF(
-        pn,
-        vec2(0.0),
-        shapeW / u_resolution.y,
-        shapeH / u_resolution.y,
-        shapeR / u_resolution.y,
-        shapeN
-      );
+      float dd = shapeSDF(pn, shapeW, shapeH, shapeR, shapeN, shapeType);
       if (!hasShape) {
         result = dd;
         hasShape = true;

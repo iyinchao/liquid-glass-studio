@@ -4,9 +4,27 @@ import clsx from 'clsx';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline';
 
+export type ShapeType = 'rect' | 'circle' | 'triangle' | 'star' | 'hexagon';
+
+export const SHAPE_TYPES: { value: ShapeType; label: string; icon: string }[] = [
+  { value: 'rect', label: 'Rectangle', icon: '▭' },
+  { value: 'circle', label: 'Circle', icon: '●' },
+  { value: 'triangle', label: 'Triangle', icon: '▲' },
+  { value: 'star', label: 'Star', icon: '★' },
+  { value: 'hexagon', label: 'Hexagon', icon: '⬡' },
+];
+
+export const SHAPE_TYPE_INDEX: Record<ShapeType, number> = {
+  rect: 0,
+  circle: 1,
+  triangle: 2,
+  star: 3,
+  hexagon: 4,
+};
+
 export interface ShapeDef {
   id: string;
-  type: 'rect';
+  type: ShapeType;
   /** Center X in CSS pixels relative to canvas top-left */
   x: number;
   /** Center Y in CSS pixels relative to canvas top-left */
@@ -357,23 +375,83 @@ export const EditorMode = ({
           </div>
         </div>
         <div className={styles.shapeList}>
-          {shapes.map((shape, index) => (
-            <div
-              key={shape.id}
-              className={clsx(styles.shapeListItem, {
-                [styles.shapeListItemSelected]: shape.id === selectedShapeId,
-              })}
-              onClick={() => onSelectShape(shape.id)}
-            >
-              <span className={styles.shapeListItemIcon}>&#9645;</span>
-              <span>
-                {lang['editor.shape']} {index + 1}
-              </span>
-              <span className={styles.shapeListItemSize}>
-                {Math.round(shape.width)}x{Math.round(shape.height)}
-              </span>
-            </div>
-          ))}
+          {shapes.map((shape, index) => {
+            const typeInfo = SHAPE_TYPES.find((t) => t.value === shape.type) ?? SHAPE_TYPES[0];
+            const isSelected = shape.id === selectedShapeId;
+            return (
+              <div key={shape.id}>
+                <div
+                  className={clsx(styles.shapeListItem, {
+                    [styles.shapeListItemSelected]: isSelected,
+                  })}
+                  onClick={() => onSelectShape(shape.id)}
+                >
+                  <span className={styles.shapeListItemIcon}>{typeInfo.icon}</span>
+                  <span>
+                    {lang['editor.shape']} {index + 1}
+                  </span>
+                  <span className={styles.shapeListItemSize}>
+                    {Math.round(shape.width)}x{Math.round(shape.height)}
+                  </span>
+                </div>
+                {isSelected && (
+                  <div className={styles.shapeProps}>
+                    <div className={styles.shapeTypeRow}>
+                      {SHAPE_TYPES.map((st) => (
+                        <button
+                          key={st.value}
+                          className={clsx(styles.shapeTypeBtn, {
+                            [styles.shapeTypeBtnActive]: shape.type === st.value,
+                          })}
+                          title={st.label}
+                          onClick={() => {
+                            const newShapes = shapes.map((s) =>
+                              s.id === shape.id ? { ...s, type: st.value } : s,
+                            );
+                            onShapesChange(newShapes);
+                          }}
+                        >
+                          {st.icon}
+                        </button>
+                      ))}
+                    </div>
+                    <label className={styles.shapePropLabel}>
+                      <span>{lang['editor.shapeRadius'] ?? 'Radius'}</span>
+                      <input
+                        type="range"
+                        min={1}
+                        max={100}
+                        step={1}
+                        value={shape.radius}
+                        onChange={(e) => {
+                          const newShapes = shapes.map((s) =>
+                            s.id === shape.id ? { ...s, radius: Number(e.target.value) } : s,
+                          );
+                          onShapesChange(newShapes);
+                        }}
+                      />
+                    </label>
+                    <label className={styles.shapePropLabel}>
+                      <span>{lang['editor.shapeRoundness'] ?? 'Roundness'}</span>
+                      <input
+                        type="range"
+                        min={2}
+                        max={7}
+                        step={0.1}
+                        value={shape.roundness}
+                        onChange={(e) => {
+                          const newShapes = shapes.map((s) =>
+                            s.id === shape.id ? { ...s, roundness: Number(e.target.value) } : s,
+                          );
+                          onShapesChange(newShapes);
+                        }}
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>

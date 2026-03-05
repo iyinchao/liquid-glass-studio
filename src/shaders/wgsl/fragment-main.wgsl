@@ -90,10 +90,66 @@ fn smin(a: f32, b: f32, k: f32) -> f32 {
     return mix(b, a, h) - k * h * (1.0 - h);
 }
 
+fn sdEllipse(p: vec2<f32>, r: vec2<f32>) -> f32 {
+    let k = p / r;
+    return (length(k) - 1.0) * min(r.x, r.y);
+}
+
+fn sdTriangle(p_in: vec2<f32>, r: f32) -> f32 {
+    let k = sqrt(3.0);
+    var p = p_in;
+    p.x = abs(p.x) - r;
+    p.y = p.y + r / k;
+    if (p.x + k * p.y > 0.0) {
+        p = vec2<f32>(p.x - k * p.y, -k * p.x - p.y) / 2.0;
+    }
+    p.x = p.x - clamp(p.x, -2.0 * r, 0.0);
+    return -length(p) * sign(p.y);
+}
+
+fn sdStar(p_in: vec2<f32>, r: f32, rf: f32) -> f32 {
+    let k1 = vec2<f32>(0.809016994375, -0.587785252292);
+    let k2 = vec2<f32>(-k1.x, k1.y);
+    var p = p_in;
+    p.x = abs(p.x);
+    p = p - 2.0 * max(dot(k1, p), 0.0) * k1;
+    p = p - 2.0 * max(dot(k2, p), 0.0) * k2;
+    p.x = abs(p.x);
+    p.y = p.y - r;
+    let ba = rf * vec2<f32>(-k1.y, k1.x) - vec2<f32>(0.0, 1.0);
+    let h = clamp(dot(p, ba) / dot(ba, ba), 0.0, r);
+    return length(p - ba * h) * sign(p.y * ba.x - p.x * ba.y);
+}
+
+fn sdHexagon(p_in: vec2<f32>, r: f32) -> f32 {
+    let k = vec3<f32>(-0.866025404, 0.5, 0.577350269);
+    var p = abs(p_in);
+    p = p - 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
+    p = p - vec2<f32>(clamp(p.x, -k.z * r, k.z * r), r);
+    return length(p) * sign(p.y);
+}
+
+fn shapeSDF(pn: vec2<f32>, shapeW: f32, shapeH: f32, shapeR: f32, shapeN: f32, shapeType: i32) -> f32 {
+    let rY = u.u_resolution.y;
+    if (shapeType == 1) {
+        return sdEllipse(pn, vec2<f32>(shapeW * u.u_dpr * 0.5, shapeH * u.u_dpr * 0.5) / rY);
+    } else if (shapeType == 2) {
+        let s = min(shapeW, shapeH) * u.u_dpr * 0.5 / rY;
+        return sdTriangle(pn, s);
+    } else if (shapeType == 3) {
+        let s = min(shapeW, shapeH) * u.u_dpr * 0.5 / rY;
+        return sdStar(pn, s, 0.45);
+    } else if (shapeType == 4) {
+        let s = min(shapeW, shapeH) * u.u_dpr * 0.5 / rY;
+        return sdHexagon(pn, s);
+    } else {
+        return roundedRectSDF(pn, vec2<f32>(0.0), shapeW / rY, shapeH / rY, shapeR / rY, shapeN);
+    }
+}
+
 fn mainSDF(p1: vec2<f32>, p2: vec2<f32>, p: vec2<f32>) -> f32 {
     var d: f32;
     if (u.u_shapeCount > 0) {
-        // Editor mode: loop over shape array
         var result: f32 = 1.0;
         var hasShape: bool = false;
         for (var i: i32 = 0; i < 8; i = i + 1) {
@@ -103,15 +159,9 @@ fn mainSDF(p1: vec2<f32>, p2: vec2<f32>, p: vec2<f32>) -> f32 {
             let shapeH = u.u_shapes[i].w;
             let shapeR = u.u_shapeParams[i].x;
             let shapeN = u.u_shapeParams[i].y;
+            let shapeType = i32(u.u_shapeParams[i].z);
             let pn = (-shapeCenter) / u.u_resolution.y + p / u.u_resolution.y;
-            let dd = roundedRectSDF(
-                pn,
-                vec2<f32>(0.0),
-                shapeW / u.u_resolution.y,
-                shapeH / u.u_resolution.y,
-                shapeR / u.u_resolution.y,
-                shapeN
-            );
+            let dd = shapeSDF(pn, shapeW, shapeH, shapeR, shapeN, shapeType);
             if (!hasShape) {
                 result = dd;
                 hasShape = true;

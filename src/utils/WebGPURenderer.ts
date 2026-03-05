@@ -727,20 +727,6 @@ export class WebGPUMultiPassRenderer {
           continue;
         }
 
-        // Handle shape arrays - pack vec2[] into vec4[] for shapeParams
-        if (key === 'u_shapeParams' && Array.isArray(value)) {
-          // value is flat [r0, n0, r1, n1, ...] - pack into vec4 [r0, n0, 0, 0, r1, n1, 0, 0, ...]
-          const packed: number[] = [];
-          for (let i = 0; i < 8; i++) {
-            packed.push(value[i * 2] ?? 0);     // radius
-            packed.push(value[i * 2 + 1] ?? 2); // roundness
-            packed.push(0);                       // padding
-            packed.push(0);                       // padding
-          }
-          pass.uniformLayout.set('u_shapeParams', packed);
-          continue;
-        }
-
         pass.uniformLayout.set(key, value);
       }
 
