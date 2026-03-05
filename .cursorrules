@@ -1,0 +1,99 @@
+# Liquid Glass Studio - AI Agent Instructions
+
+## Project Context
+
+Liquid Glass Studio is a WebGL2/WebGPU real-time glass effect renderer recreating Apple's Liquid Glass UI. Built with React 18 + TypeScript + Vite + GLSL shaders.
+
+## File Map
+
+- `src/App.tsx` — Main render loop, canvas setup, texture management, WebGL2/WebGPU initialization
+- `src/Controls.tsx` — All Leva UI control definitions (refraction, glare, blur, tint, shape, text, HDR, emissive, debug)
+- `src/utils/presetUtils.ts` — 8 built-in glass presets, import/export JSON functions
+- `src/utils/GLUtils.ts` — WebGL2 multi-pass renderer and texture utilities
+- `src/utils/WebGPURenderer.ts` — WebGPU multi-pass renderer
+- `src/shaders/fragment-main.glsl` — Main composite shader (refraction, fresnel, glare, tint, HDR, emissive, SDF shapes)
+- `src/shaders/fragment-bg.glsl` — Background rendering pass
+- `src/shaders/fragment-bg-vblur.glsl` / `fragment-bg-hblur.glsl` — Gaussian blur passes
+- `src/shaders/wgsl/` — WebGPU equivalents of all GLSL shaders
+- `src/components/EditorMode/` — Multi-shape drag/resize editor (up to 8 shapes)
+- `src/components/PresetControls/` — Preset selector UI and showcase animation triggers
+- `src/utils/showcaseAnimations.ts` — 5 keyframe-animated demo sequences
+- `src/utils/textSDF.ts` — SDF text generation
+- `src/utils/uiContentRenderer.ts` — Canvas-based UI content (clock, weather, music, text)
+- `src/utils/hdrLoader.ts` — .hdr file parser
+- `src/utils/languages.ts` — i18n (en-US, zh-CN, uz-UZ)
+
+## Rendering Pipeline
+
+4-pass multipass: bgPass → vBlurPass → hBlurPass → mainPass (final composite to screen).
+
+## Glass Parameter Reference
+
+### Refraction
+- `refThickness` (1-80): Glass edge depth
+- `refFactor` (1-4): Index of refraction (1.33=water, 1.52=glass, 2.42=diamond)
+- `refDispersion` (0-50): Chromatic aberration strength
+
+### Fresnel
+- `refFresnelRange` (0-100): How far inward fresnel extends
+- `refFresnelHardness` (0-100): Edge falloff sharpness
+- `refFresnelFactor` (0-100): Highlight intensity
+
+### Glare
+- `glareRange` (0-100): Extent from edges
+- `glareHardness` (0-100): Falloff sharpness
+- `glareFactor` (0-120): Brightness
+- `glareConvergence` (0-100): Concentration along light direction
+- `glareOppositeFactor` (0-100): Far-side brightness
+- `glareAngle` (-180 to 180): Light direction in degrees
+
+### Blur & Tint
+- `blurRadius` (1-200): Gaussian blur strength
+- `blurEdge` (bool): Uniform blur vs depth-faded
+- `tint` (RGBA): Color overlay inside glass
+- `shadowExpand` (2-100): Shadow size
+- `shadowFactor` (0-100): Shadow opacity
+
+### Emissive
+- `emissiveColor` (RGB): Glow color
+- `emissiveIntensity` (0-100): Glow brightness
+- `emissivePulse` (bool): Sine-wave pulse animation
+
+### HDR
+- `hdrEnabled` (bool): Toggle tone mapping
+- `hdrExposure` (0.1-10): Brightness multiplier
+- `hdrToneMappingType`: 0=None, 1=Reinhard, 2=ACES Filmic
+- `hdrBloom` (0-1): Bloom intensity
+
+### Shapes
+- `shapeWidth/Height` (20-800): Dimensions
+- `shapeRadius` (1-100): Corner radius percentage
+- `shapeRoundness` (2-7): Superellipse exponent
+- `mergeRate` (0-0.3): Smooth union blend factor
+- Shape types: rect (0), circle (1), triangle (2), star (3), hexagon (4)
+
+## Creating Glass Presets
+
+Add to `BUILT_IN_PRESETS` in `src/utils/presetUtils.ts`. Required fields defined by `GlassPresetValues` type:
+refThickness, refFactor, refDispersion, refFresnelRange, refFresnelHardness, refFresnelFactor, glareRange, glareHardness, glareFactor, glareConvergence, glareOppositeFactor, glareAngle, blurRadius, blurEdge, tint, shadowExpand, shadowFactor.
+
+## Common Design Patterns
+
+**Frosted card**: blurRadius 30-60, refFactor 1.05-1.2, blurEdge true, light tint with alpha ~0.05
+**Crystal/diamond**: refFactor 1.8-2.5, refDispersion 20-50, blurRadius 1, high glare
+**Glowing glass**: emissiveIntensity > 0 with chosen emissiveColor, emissivePulse for animation
+**Dark glass**: tint with alpha 0.4-0.6 and dark RGB, high refFresnelFactor for bright edges
+
+## Adding New Shape Types
+
+1. Add SDF function in `fragment-main.glsl` (and `wgsl/fragment-main.wgsl`)
+2. Add dispatch case in `shapeSDF()` function
+3. Add to `ShapeType` union, `SHAPE_TYPES` array, and `SHAPE_TYPE_INDEX` in `EditorMode.tsx`
+
+## Commands
+
+```bash
+pnpm install    # Install
+pnpm dev        # Development server
+pnpm build      # Production build
+```
