@@ -29,7 +29,7 @@ https://liquid-glass.iyinchao.cn/
 
 ## Features
 
-**✨ Apple Liquid Glass Effects:**
+**Apple Liquid Glass Effects:**
 
 - Refraction
 - Dispersion
@@ -40,23 +40,34 @@ https://liquid-glass.iyinchao.cn/
 - Gaussian blur masking
 - Anti-aliasing
 
-**⚙️ Interactive Controls:**
+**Rendering:**
+
+- WebGL2-based rendering for high-performance graphics
+- WebGPU rendering backend with toggle and FPS overlay
+- HDR illumination with tone mapping
+- SDF text rendering with glass effect
+- Self-illumination / emissive glow
+
+**Interactive Controls:**
 
 - Comprehensive real-time parameter adjustments via an intuitive UI
+- 8 built-in glass presets
+- Editor mode with multiple shapes (circle, triangle, star, hexagon, ellipse)
+- UI content inside glass shapes
+- Showcase animations with 5 animated demos
 
-**🖼 Background Options:**
+**Background Options:**
 
 - Support for both images and videos as dynamic backgrounds
 
-**🎞 Animation Support:**
+**Animation Support:**
 
 - Spring-based shape animations with configurable behavior
 
 ## Technical Highlights
 
-- WebGL-based rendering for high-performance graphics
 - Multipass rendering for high-quality & performant Gaussian blur
-- Using SDF Defined shapes and smooth merge function
+- SDF-defined shapes and smooth merge function
 - Custom shader implementations for realistic glass effects
 - Custom Leva UI components for intuitive parameter controls
 
@@ -93,6 +104,10 @@ pnpm build
 - [x] Control parameter import / export
 - [x] Render Step view to show intermediate results
 - [x] UI Content inside of shape
+
+## Contributors
+
+- [@Hmz1hb](https://github.com/Hmz1hb)
 
 ## Credits
 
