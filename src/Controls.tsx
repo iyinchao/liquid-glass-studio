@@ -43,6 +43,10 @@ export const useLevaControls = ({
           },
           singleMode: true,
         }),
+        editorMode: {
+          label: lang['editor.editorMode'],
+          value: false,
+        },
       }),
       refThickness: {
         label: lang['editor.refThickness'],
@@ -176,6 +180,49 @@ export const useLevaControls = ({
       //   // alphaPatternColorA: '#bbb',
       //   // alphaPatternColorB: '#eee',
       // }),
+      ['selfIllumination']: folder({
+        emissiveColor: {
+          label: lang['editor.emissiveColor'],
+          value: { r: 255, g: 220, b: 200, a: 1 },
+        },
+        emissiveIntensity: {
+          label: lang['editor.emissiveIntensity'],
+          min: 0,
+          max: 100,
+          step: 0.01,
+          value: 0,
+        },
+        emissivePulse: {
+          label: lang['editor.emissivePulse'],
+          value: false,
+        },
+      }, {
+        collapsed: true,
+      }),
+      ['hdrSettings']: folder({
+        hdrEnabled: {
+          label: lang['editor.hdrEnabled'],
+          value: false,
+        },
+        hdrExposure: {
+          label: lang['editor.hdrExposure'],
+          min: 0.1,
+          max: 5.0,
+          step: 0.01,
+          value: 1.0,
+        },
+        hdrToneMappingType: {
+          label: lang['editor.hdrToneMappingType'],
+          value: 2,
+          options: {
+            'None': 0,
+            'Reinhard': 1,
+            'ACES': 2,
+          },
+        },
+      }, {
+        collapsed: true,
+      }),
       ['shapeSettings']: folder({
         shapeWidth: {
           label: lang['editor.shapeWidth'],
@@ -217,6 +264,38 @@ export const useLevaControls = ({
           value: true,
         },
       }),
+      ['textSettings']: folder({
+        textEnabled: {
+          label: lang['editor.textEnabled'],
+          value: false,
+        },
+        textContent: {
+          label: lang['editor.textContent'],
+          value: 'Glass',
+        },
+        textSize: {
+          label: lang['editor.textSize'],
+          min: 20,
+          max: 200,
+          step: 1,
+          value: 80,
+        },
+        textFont: {
+          label: lang['editor.textFont'],
+          value: 'Arial',
+          options: {
+            'Arial': 'Arial',
+            'Helvetica': 'Helvetica',
+            'Georgia': 'Georgia',
+            'Times New Roman': 'Times New Roman',
+            'Courier New': 'Courier New',
+            'Verdana': 'Verdana',
+            'Impact': 'Impact',
+          },
+        },
+      }, {
+        collapsed: true,
+      }),
       animationSettings: folder({
         springSizeFactor: {
           label: lang['editor.springSizeFactor'],
@@ -224,6 +303,35 @@ export const useLevaControls = ({
           max: 50,
           step: 0.01,
           value: 10,
+        },
+      }, {
+        collapsed: true
+      }),
+      uiContentSettings: folder({
+        uiContentEnabled: {
+          label: lang['editor.uiContentEnabled'],
+          value: false,
+        },
+        uiContentType: {
+          label: lang['editor.uiContentType'],
+          value: 'clock' as string,
+          options: {
+            [lang['editor.uiContentType.clock']]: 'clock',
+            [lang['editor.uiContentType.weather']]: 'weather',
+            [lang['editor.uiContentType.music']]: 'music',
+            [lang['editor.uiContentType.custom-text']]: 'custom-text',
+          },
+        },
+        uiContentText: {
+          label: lang['editor.uiContentText'],
+          value: 'Hello World',
+        },
+        uiContentOpacity: {
+          label: lang['editor.uiContentOpacity'],
+          min: 0,
+          max: 100,
+          step: 1,
+          value: 80,
         },
       }, {
         collapsed: true

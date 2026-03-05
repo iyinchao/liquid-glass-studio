@@ -1,6 +1,6 @@
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { LevaButton } from '../LevaButton/LevaButton';
-import { exportPreset, importPreset } from '../../utils/presetUtils';
+import { exportPreset, importPreset, BUILT_IN_PRESETS } from '../../utils/presetUtils';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import styles from './PresetControls.module.scss';
@@ -14,6 +14,7 @@ export interface PresetControlsProps {
 
 export const PresetControls = ({ controls, controlsAPI, lang }: PresetControlsProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activePresetId, setActivePresetId] = useState<string | null>(null);
 
   const handleExport = () => {
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
@@ -41,6 +42,7 @@ export const PresetControls = ({ controls, controlsAPI, lang }: PresetControlsPr
       } else {
         console.error('controlsAPI is not a function. Import may fail.', controlsAPI);
       }
+      setActivePresetId(null);
       alert(lang['editor.importSuccessMessage']);
     } catch (err) {
       alert(lang['editor.importFailedMessage'](err instanceof Error ? err.message : 'Unknown error'));
@@ -51,25 +53,64 @@ export const PresetControls = ({ controls, controlsAPI, lang }: PresetControlsPr
     }
   };
 
+  const handlePresetSelect = (presetId: string) => {
+    const preset = BUILT_IN_PRESETS.find((p) => p.id === presetId);
+    if (!preset) return;
+
+    if (typeof controlsAPI === 'function') {
+      try {
+        controlsAPI(preset.values);
+        setActivePresetId(presetId);
+      } catch (err) {
+        console.error('Error applying built-in preset:', err);
+      }
+    }
+  };
+
+  const getPresetName = (presetId: string): string => {
+    const key = `editor.preset.${presetId}` as keyof typeof lang;
+    return (lang[key] as string) || presetId;
+  };
+
   return (
-    <div className={styles.presetControls}>
-      <LevaButton onClick={handleExport} title="Export current preset">
-        <FileDownloadOutlinedIcon style={{ fontSize: '14px', marginRight: '4px' }} />
-        {lang['editor.export'] || 'Export'}
-      </LevaButton>
+    <div>
+      <div className={styles.presetControls}>
+        <LevaButton onClick={handleExport} title="Export current preset">
+          <FileDownloadOutlinedIcon style={{ fontSize: '14px', marginRight: '4px' }} />
+          {lang['editor.export'] || 'Export'}
+        </LevaButton>
 
-      <LevaButton onClick={handleImportClick} title="Import preset from file">
-        <FileUploadOutlinedIcon style={{ fontSize: '14px', marginRight: '4px' }} />
-        {lang['editor.import'] || 'Import'}
-      </LevaButton>
+        <LevaButton onClick={handleImportClick} title="Import preset from file">
+          <FileUploadOutlinedIcon style={{ fontSize: '14px', marginRight: '4px' }} />
+          {lang['editor.import'] || 'Import'}
+        </LevaButton>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json"
-        onChange={handleFileChange}
-        style={{ display: 'none' }}
-      />
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".json"
+          onChange={handleFileChange}
+          style={{ display: 'none' }}
+        />
+      </div>
+
+      <div className={styles.presetSection}>
+        <div className={styles.presetLabel}>
+          {(lang as Record<string, unknown>)['editor.builtInPresets'] as string || 'Glass Presets'}
+        </div>
+        <div className={styles.presetGrid}>
+          {BUILT_IN_PRESETS.map((preset) => (
+            <LevaButton
+              key={preset.id}
+              active={activePresetId === preset.id}
+              onClick={() => handlePresetSelect(preset.id)}
+              title={getPresetName(preset.id)}
+            >
+              {getPresetName(preset.id)}
+            </LevaButton>
+          ))}
+        </div>
+      </div>
     </div>
   );
 };

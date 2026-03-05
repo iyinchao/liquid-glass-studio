@@ -24,6 +24,14 @@ uniform float u_bgTextureRatio;
 uniform int u_bgTextureReady;
 uniform int u_showShape1;
 
+uniform int u_shapeCount;
+uniform vec4 u_shapes[8]; // x, y, width, height per shape
+uniform vec2 u_shapeParams[8]; // radius, roundness per shape
+
+uniform sampler2D u_textSDF;
+uniform int u_textEnabled;
+uniform float u_textScale;
+
 float chessboard(vec2 uv, float size, int mode) {
   float yBars = step(size * 2.0, mod(uv.y * 2.0, size * 4.0));
   float xBars = step(size * 2.0, mod(uv.x * 2.0, size * 4.0));
@@ -92,10 +100,38 @@ float sdgMin(float a, float b) {
 }
 
 float mainSDF(vec2 p1, vec2 p2, vec2 p) {
+  if (u_shapeCount > 0) {
+    float result = 1.0;
+    bool hasShape = false;
+    for (int i = 0; i < 8; i++) {
+      if (i >= u_shapeCount) break;
+      vec2 shapeCenter = vec2(u_shapes[i].x, u_shapes[i].y);
+      float shapeW = u_shapes[i].z;
+      float shapeH = u_shapes[i].w;
+      float shapeR = u_shapeParams[i].x;
+      float shapeN = u_shapeParams[i].y;
+      vec2 pn = (-shapeCenter) / u_resolution.y + p / u_resolution.y;
+      float d = roundedRectSDF(
+        pn,
+        vec2(0.0),
+        shapeW / u_resolution.y,
+        shapeH / u_resolution.y,
+        shapeR / u_resolution.y,
+        shapeN
+      );
+      if (!hasShape) {
+        result = d;
+        hasShape = true;
+      } else {
+        result = smin(result, d, u_mergeRate);
+      }
+    }
+    return result;
+  }
+
   vec2 p1n = p1 + p / u_resolution.y;
   vec2 p2n = p2 + p / u_resolution.y;
   float d1 = u_showShape1 == 1 ? sdCircle(p1n, 100.0 * u_dpr / u_resolution.y) : 1.0;
-  // float d2 = sdSuperellipse(p2, 200.0 / u_resolution.y, 4.0).x;
   float d2 = roundedRectSDF(
     p2n,
     vec2(0.0),
@@ -105,7 +141,17 @@ float mainSDF(vec2 p1, vec2 p2, vec2 p) {
     u_shapeRoundness
   );
 
-  return smin(d1, d2, u_mergeRate);
+  float d = smin(d1, d2, u_mergeRate);
+
+  if (u_textEnabled == 1) {
+    vec2 uv = p / u_resolution.xy;
+    uv.y = 1.0 - uv.y;
+    float textSample = texture(u_textSDF, uv).r;
+    float textDist = (textSample - 0.5) * u_textScale / u_resolution.y;
+    d = smin(d, textDist, u_mergeRate);
+  }
+
+  return d;
 }
 
 // 输入：原始 uv、canvas 宽高比、纹理宽高比

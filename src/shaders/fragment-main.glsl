@@ -35,6 +35,24 @@ uniform float u_glareHardness;
 uniform float u_glareAngle;
 uniform int u_blurEdge;
 uniform int u_showShape1;
+uniform vec3 u_emissiveColor;
+uniform float u_emissiveIntensity;
+uniform float u_emissivePulse;
+uniform int u_hdrEnabled;
+uniform float u_exposure;
+uniform int u_toneMappingType;
+
+uniform sampler2D u_uiContent;
+uniform int u_uiContentEnabled;
+uniform float u_uiContentOpacity;
+
+uniform int u_shapeCount;
+uniform vec4 u_shapes[8]; // x, y, width, height per shape
+uniform vec2 u_shapeParams[8]; // radius, roundness per shape
+
+uniform sampler2D u_textSDF;
+uniform int u_textEnabled;
+uniform float u_textScale;
 
 uniform int STEP;
 
@@ -111,11 +129,41 @@ float smin(float a, float b, float k) {
 }
 
 float mainSDF(vec2 p1, vec2 p2, vec2 p) {
+  if (u_shapeCount > 0) {
+    // Editor mode: loop over shape array
+    float result = 1.0;
+    bool hasShape = false;
+    for (int i = 0; i < 8; i++) {
+      if (i >= u_shapeCount) break;
+      vec2 shapeCenter = vec2(u_shapes[i].x, u_shapes[i].y);
+      float shapeW = u_shapes[i].z;
+      float shapeH = u_shapes[i].w;
+      float shapeR = u_shapeParams[i].x;
+      float shapeN = u_shapeParams[i].y;
+      vec2 pn = (-shapeCenter) / u_resolution.y + p / u_resolution.y;
+      float d = roundedRectSDF(
+        pn,
+        vec2(0.0),
+        shapeW / u_resolution.y,
+        shapeH / u_resolution.y,
+        shapeR / u_resolution.y,
+        shapeN
+      );
+      if (!hasShape) {
+        result = d;
+        hasShape = true;
+      } else {
+        result = smin(result, d, u_mergeRate);
+      }
+    }
+    return result;
+  }
+
+  // Legacy follow mode
   vec2 p1n = p1 + p / u_resolution.y;
   vec2 p2n = p2 + p / u_resolution.y;
 
   float d1 = u_showShape1 == 1 ? sdCircle(p1n, 100.0 * u_dpr / u_resolution.y) : 1.0;
-  // float d2 = sdSuperellipse(p2, 200.0 / u_resolution.y, 4.0).x;
   float d2 = roundedRectSDF(
     p2n,
     vec2(0.0),
@@ -125,7 +173,17 @@ float mainSDF(vec2 p1, vec2 p2, vec2 p) {
     u_shapeRoundness
   );
 
-  return smin(d1, d2, u_mergeRate);
+  float d = smin(d1, d2, u_mergeRate);
+
+  if (u_textEnabled == 1) {
+    vec2 uv = p / u_resolution.xy;
+    uv.y = 1.0 - uv.y;
+    float textSample = texture(u_textSDF, uv).r;
+    float textDist = (textSample - 0.5) * u_textScale / u_resolution.y;
+    d = smin(d, textDist, u_mergeRate);
+  }
+
+  return d;
 }
 
 vec2 getNormal(vec2 p1, vec2 p2, vec2 p) {
@@ -279,6 +337,21 @@ vec3 LCH_TO_LAB(vec3 LCh) {
 }
 vec3 LCH_TO_SRGB(vec3 lch) {
   return LAB_TO_SRGB(LCH_TO_LAB(lch));
+}
+
+// ACES Filmic tone mapping
+vec3 ACESFilm(vec3 x) {
+  float a = 2.51;
+  float b = 0.03;
+  float c = 2.43;
+  float d = 0.59;
+  float e = 0.14;
+  return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
+// Reinhard tone mapping
+vec3 Reinhard(vec3 x) {
+  return x / (1.0 + x);
 }
 
 float vec2ToAngle(vec2 v) {
@@ -739,9 +812,50 @@ void main() {
       outColor = texture(u_bg, v_uv);
     }
 
+    // UI content compositing
+    if (u_uiContentEnabled == 1 && merged < 0.0) {
+      float nmerged_ui = -1.0 * (merged * u_resolution1x.y);
+      float x_R_ratio_ui = 1.0 - nmerged_ui / u_refThickness;
+      float thetaI_ui = asin(pow(clamp(x_R_ratio_ui, 0.0, 1.0), 2.0));
+      float thetaT_ui = asin(1.0 / u_refFactor * sin(thetaI_ui));
+      float edgeFactor_ui = -1.0 * tan(thetaT_ui - thetaI_ui);
+      if (nmerged_ui >= u_refThickness) {
+        edgeFactor_ui = 0.0;
+      }
+      vec2 normal_ui = getNormal(p1, p2, gl_FragCoord.xy);
+      vec2 refractedUV = v_uv;
+      if (edgeFactor_ui > 0.0) {
+        refractedUV = v_uv - normal_ui * edgeFactor_ui * 0.05 * u_dpr *
+          vec2(u_resolution.y / (u_resolution1x.x * u_dpr), 1.0);
+      }
+      vec4 uiColor = texture(u_uiContent, refractedUV);
+      outColor.rgb = mix(outColor.rgb, uiColor.rgb, uiColor.a * u_uiContentOpacity);
+    }
+
+    // Self-illumination (emissive glow)
+    if (merged < 0.0 && u_emissiveIntensity > 0.0) {
+      float nmerged_em = -1.0 * (merged * u_resolution1x.y);
+      float emissiveDepth = clamp(nmerged_em / u_refThickness, 0.0, 1.0);
+      float emissiveFactor = smoothstep(0.0, 0.5, emissiveDepth);
+      float pulseMultiplier = 1.0 + u_emissivePulse * 0.3;
+      vec3 emissive = u_emissiveColor * u_emissiveIntensity * emissiveFactor * pulseMultiplier;
+      outColor.rgb += emissive;
+    }
+
     // smooth
     outColor = mix(outColor, texture(u_bg, v_uv), smoothstep(-0.001, 0.001, merged));
 
+  }
+
+  // HDR tone mapping
+  if (u_hdrEnabled == 1) {
+    outColor.rgb *= u_exposure;
+    if (u_toneMappingType == 1) {
+      outColor.rgb = Reinhard(outColor.rgb);
+    } else if (u_toneMappingType == 2) {
+      outColor.rgb = ACESFilm(outColor.rgb);
+    }
+    outColor.rgb = pow(outColor.rgb, vec3(1.0 / 2.2));
   }
 
   fragColor = outColor;

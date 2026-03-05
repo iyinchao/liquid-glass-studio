@@ -3,3 +3,21 @@
   gap: 8px;
   margin-top: 8px;
 }
+
+.presetSection {
+  margin-top: 8px;
+}
+
+.presetLabel {
+  font-size: 11px;
+  color: var(--leva-colors-highlight2);
+  margin-bottom: 6px;
+  font-family: var(--leva-fonts-mono);
+  opacity: 0.7;
+}
+
+.presetGrid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}

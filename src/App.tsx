@@ -27,6 +27,8 @@ import { Controller } from '@react-spring/web';
 // import { useResizeObserver } from './utils/useResizeOberver';
 import clsx from 'clsx';
 import { capitalize, computeGaussianKernelByRadius } from './utils';
+import { EditorMode, createDefaultShape } from './components/EditorMode';
+import type { ShapeDef } from './components/EditorMode';
 
 import bgGrid from '@/assets/bg-grid.png';
 import bgBars from '@/assets/bg-bars.png';
@@ -46,7 +48,13 @@ import PlayCircleOutlinedIcon from '@mui/icons-material/PlayCircleOutlined';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import { useLevaControls } from './Controls';
 import { PresetControls } from './components/PresetControls/PresetControls';
-
+import {
+  createUIContentCanvas,
+  renderUIContent,
+  uploadCanvasTexture,
+  type UIContentType,
+} from './utils/uiContentRenderer';
+import { generateTextSDF, uploadTextSDFTexture } from './utils/textSDF';
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -55,6 +63,12 @@ function App() {
     height: Math.max(Math.min(window.innerWidth, window.innerHeight) - 150, 600),
     dpr: 1,
   });
+
+  // Editor mode shape state
+  const [editorShapes, setEditorShapes] = useState<ShapeDef[]>([]);
+  const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
+  const editorShapesRef = useRef<ShapeDef[]>([]);
+  editorShapesRef.current = editorShapes;
 
   const { controls, lang, langName, levaGlobal, controlsAPI } = useLevaControls({
     containerRender: {
@@ -223,6 +237,15 @@ function App() {
     bgTextureReady: boolean;
     bgVideoEls: Map<number, HTMLVideoElement>;
     langName: typeof langName;
+    uiContentCanvas: HTMLCanvasElement | null;
+    uiContentTexture: WebGLTexture | null;
+    textSDFTexture: WebGLTexture | null;
+    textSDFDirty: boolean;
+    lastTextContent: string;
+    lastTextSize: number;
+    lastTextFont: string;
+    lastTextEnabled: boolean;
+    startTime: number | null;
   }>({
     canvasWindowCtrlRef: null,
     renderRaf: null,
@@ -287,10 +310,37 @@ function App() {
     bgTextureReady: false,
     bgVideoEls: new Map(),
     langName: langName,
+    uiContentCanvas: null,
+    uiContentTexture: null,
+    textSDFTexture: null,
+    textSDFDirty: true,
+    lastTextContent: '',
+    lastTextSize: 0,
+    lastTextFont: '',
+    lastTextEnabled: false,
+    startTime: null,
   });
   stateRef.current.canvasInfo = canvasInfo;
   stateRef.current.controls = controls;
   stateRef.current.langName = langName;
+
+  // Initialize editor shapes when editor mode is first enabled
+  const prevEditorMode = useRef(false);
+  useEffect(() => {
+    if (controls.editorMode && !prevEditorMode.current) {
+      // Entering editor mode: seed with one shape at center
+      if (editorShapes.length === 0) {
+        const initial = createDefaultShape(canvasInfo.width, canvasInfo.height);
+        initial.width = controls.shapeWidth;
+        initial.height = controls.shapeHeight;
+        initial.radius = controls.shapeRadius;
+        initial.roundness = controls.shapeRoundness;
+        setEditorShapes([initial]);
+        setSelectedShapeId(initial.id);
+      }
+    }
+    prevEditorMode.current = controls.editorMode;
+  }, [controls.editorMode]);
 
   // useEffect(() => {
   //   setLangName(controls.language[0] as keyof typeof languages);
@@ -347,6 +397,10 @@ function App() {
     const onPointerMove = (e: PointerEvent) => {
       const canvasInfo = stateRef.current.canvasInfo;
       if (!canvasInfo) {
+        return;
+      }
+      // In editor mode, don't update mouse tracking for shapes
+      if (stateRef.current.controls.editorMode) {
         return;
       }
       stateRef.current.canvasPointerPos = {
@@ -413,18 +467,14 @@ function App() {
       bgTextureType: null as typeof stateRef.current.bgTextureType,
       bgTextureUrl: null as typeof stateRef.current.bgTextureUrl,
     };
-    // let startTime: number | null = null
     const render = () => {
       raf = requestAnimationFrame(render);
 
-      // let time = 0;
-      // if (!startTime) {
-      //   startTime = t;
-      // } else {
-      //   time = t - startTime;
-      // }
-
-      // console.log(time);
+      const now = performance.now();
+      if (!stateRef.current.startTime) {
+        stateRef.current.startTime = now;
+      }
+      const elapsedTime = (now - stateRef.current.startTime) / 1000.0;
 
       const canvasInfo = stateRef.current.canvasInfo;
       const textureUrl = stateRef.current.bgTextureUrl;
@@ -516,13 +566,42 @@ function App() {
           100,
       };
 
+      // Build shape uniforms for editor mode
+      const editorShapes = editorShapesRef.current;
+      const isEditorMode = controls.editorMode && editorShapes.length > 0;
+
+      // Prepare shape arrays for uniforms (up to 8 shapes)
+      // Each shape: vec4(x, y, width, height) in canvas pixel coords
+      // Params: vec2(radius, roundness) per shape
+      const shapeData: number[] = [];
+      const shapeParamsData: number[] = [];
+      if (isEditorMode) {
+        for (let i = 0; i < 8; i++) {
+          if (i < editorShapes.length) {
+            const s = editorShapes[i];
+            // Convert from CSS coords (origin top-left) to shader coords (origin bottom-left)
+            const sx = s.x * canvasInfo.dpr;
+            const sy = (canvasInfo.height - s.y) * canvasInfo.dpr;
+            const sw = s.width * canvasInfo.dpr;
+            const sh = s.height * canvasInfo.dpr;
+            const sr =
+              ((Math.min(sw, sh) / 2) * s.radius) / 100;
+            shapeData.push(sx, sy, sw, sh);
+            shapeParamsData.push(sr, s.roundness);
+          } else {
+            shapeData.push(0, 0, 0, 0);
+            shapeParamsData.push(0, 2);
+          }
+        }
+      }
+
       renderer.setUniforms({
         u_resolution: [canvasInfo.width * canvasInfo.dpr, canvasInfo.height * canvasInfo.dpr],
         u_dpr: canvasInfo.dpr,
         u_blurWeights: stateRef.current.blurWeights,
         u_blurRadius: stateRef.current.controls.blurRadius,
         u_mouse: [stateRef.current.canvasPointerPos.x, stateRef.current.canvasPointerPos.y],
-        u_mouseSpring: [mouseSpring.x, mouseSpring.y],
+        u_mouseSpring: isEditorMode ? [0, 0] : [mouseSpring.x, mouseSpring.y],
         u_shapeWidth: shapeSizeSpring.x,
         u_shapeHeight: shapeSizeSpring.y,
         u_shapeRadius:
@@ -531,7 +610,75 @@ function App() {
         u_mergeRate: controls.mergeRate,
         u_glareAngle: (controls.glareAngle * Math.PI) / 180,
         u_showShape1: controls.showShape1 ? 1 : 0,
+        u_shapeCount: isEditorMode ? editorShapes.length : 0,
+        u_shapes: isEditorMode ? shapeData : new Array(32).fill(0),
+        u_shapeParams: isEditorMode ? shapeParamsData : new Array(16).fill(0),
       });
+
+      // UI Content rendering
+      if (controls.uiContentEnabled) {
+        const cw = Math.round(canvasInfo.width * canvasInfo.dpr);
+        const ch = Math.round(canvasInfo.height * canvasInfo.dpr);
+        if (
+          !stateRef.current.uiContentCanvas ||
+          stateRef.current.uiContentCanvas.width !== cw ||
+          stateRef.current.uiContentCanvas.height !== ch
+        ) {
+          stateRef.current.uiContentCanvas = createUIContentCanvas(cw, ch);
+        }
+        renderUIContent(
+          stateRef.current.uiContentCanvas,
+          controls.uiContentType as UIContentType,
+          { text: controls.uiContentText },
+        );
+        stateRef.current.uiContentTexture = uploadCanvasTexture(
+          gl,
+          stateRef.current.uiContentCanvas,
+          stateRef.current.uiContentTexture,
+        );
+      }
+
+      // Text SDF generation
+      if (
+        controls.textEnabled !== stateRef.current.lastTextEnabled ||
+        controls.textContent !== stateRef.current.lastTextContent ||
+        controls.textSize !== stateRef.current.lastTextSize ||
+        controls.textFont !== stateRef.current.lastTextFont ||
+        (
+          !lastState.canvasInfo ||
+          lastState.canvasInfo.width !== canvasInfo.width ||
+          lastState.canvasInfo.height !== canvasInfo.height ||
+          lastState.canvasInfo.dpr !== canvasInfo.dpr
+        )
+      ) {
+        stateRef.current.textSDFDirty = true;
+        stateRef.current.lastTextEnabled = controls.textEnabled;
+        stateRef.current.lastTextContent = controls.textContent;
+        stateRef.current.lastTextSize = controls.textSize;
+        stateRef.current.lastTextFont = controls.textFont;
+      }
+
+      if (controls.textEnabled && stateRef.current.textSDFDirty) {
+        const sdfWidth = Math.round(canvasInfo.width * canvasInfo.dpr);
+        const sdfHeight = Math.round(canvasInfo.height * canvasInfo.dpr);
+        const sdfResult = generateTextSDF(
+          controls.textContent,
+          controls.textSize * canvasInfo.dpr,
+          controls.textFont,
+          sdfWidth,
+          sdfHeight,
+        );
+        stateRef.current.textSDFTexture = uploadTextSDFTexture(
+          gl,
+          sdfResult,
+          stateRef.current.textSDFTexture,
+        );
+        stateRef.current.textSDFDirty = false;
+      }
+
+      const textSDFTexture = controls.textEnabled && stateRef.current.textSDFTexture
+        ? stateRef.current.textSDFTexture
+        : undefined;
 
       renderer.render({
         bgPass: {
@@ -545,6 +692,9 @@ function App() {
           u_shadowExpand: controls.shadowExpand,
           u_shadowFactor: controls.shadowFactor / 100,
           u_shadowPosition: [-controls.shadowPosition.x, -controls.shadowPosition.y],
+          u_textSDF: textSDFTexture,
+          u_textEnabled: controls.textEnabled ? 1 : 0,
+          u_textScale: 80.0,
         },
         mainPass: {
           u_tint: [
@@ -565,6 +715,26 @@ function App() {
           u_glareOppositeFactor: controls.glareOppositeFactor / 100,
           u_glareFactor: controls.glareFactor / 100,
           u_blurEdge: controls.blurEdge ? 1 : 0,
+          u_uiContentEnabled: controls.uiContentEnabled ? 1 : 0,
+          u_uiContentOpacity: controls.uiContentOpacity / 100,
+          u_uiContent: controls.uiContentEnabled && stateRef.current.uiContentTexture
+            ? stateRef.current.uiContentTexture
+            : undefined,
+          u_emissiveColor: [
+            controls.emissiveColor.r / 255,
+            controls.emissiveColor.g / 255,
+            controls.emissiveColor.b / 255,
+          ],
+          u_emissiveIntensity: controls.emissiveIntensity / 100,
+          u_emissivePulse: controls.emissivePulse
+            ? Math.sin(elapsedTime * 2.0) * 0.5 + 0.5
+            : 0.0,
+          u_hdrEnabled: controls.hdrEnabled ? 1 : 0,
+          u_exposure: controls.hdrExposure,
+          u_toneMappingType: controls.hdrToneMappingType,
+          u_textSDF: textSDFTexture,
+          u_textEnabled: controls.textEnabled ? 1 : 0,
+          u_textScale: 80.0,
           STEP: controls.step,
         },
       });
@@ -639,6 +809,17 @@ function App() {
               } as CSSProperties
             }
           />
+          {controls.editorMode && (
+            <EditorMode
+              shapes={editorShapes}
+              onShapesChange={setEditorShapes}
+              selectedShapeId={selectedShapeId}
+              onSelectShape={setSelectedShapeId}
+              canvasWidth={canvasInfo.width}
+              canvasHeight={canvasInfo.height}
+              lang={lang}
+            />
+          )}
         </div>
       </ResizableWindow>
     </>
