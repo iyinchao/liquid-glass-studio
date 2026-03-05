@@ -54,7 +54,7 @@ import {
   uploadCanvasTexture,
   type UIContentType,
 } from './utils/uiContentRenderer';
-import { generateTextSDF, uploadTextSDFTexture } from './utils/textSDF';
+import { generateTextSDF, uploadTextSDFTexture, SDF_RANGE } from './utils/textSDF';
 
 function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -318,6 +318,10 @@ function App() {
     lastTextSize: 0,
     lastTextFont: '',
     lastTextEnabled: false,
+    lastTextSuperSample: 0,
+    lastTextCanvasWidth: 0,
+    lastTextCanvasHeight: 0,
+    lastTextCanvasDpr: 0,
     startTime: null,
   });
   stateRef.current.canvasInfo = canvasInfo;
@@ -609,7 +613,7 @@ function App() {
         u_shapeRoundness: controls.shapeRoundness,
         u_mergeRate: controls.mergeRate,
         u_glareAngle: (controls.glareAngle * Math.PI) / 180,
-        u_showShape1: controls.showShape1 ? 1 : 0,
+        u_showShape1: controls.showShape1 && !controls.textEnabled ? 1 : 0,
         u_shapeCount: isEditorMode ? editorShapes.length : 0,
         u_shapes: isEditorMode ? shapeData : new Array(32).fill(0),
         u_shapeParams: isEditorMode ? shapeParamsData : new Array(16).fill(0),
@@ -644,18 +648,20 @@ function App() {
         controls.textContent !== stateRef.current.lastTextContent ||
         controls.textSize !== stateRef.current.lastTextSize ||
         controls.textFont !== stateRef.current.lastTextFont ||
-        (
-          !lastState.canvasInfo ||
-          lastState.canvasInfo.width !== canvasInfo.width ||
-          lastState.canvasInfo.height !== canvasInfo.height ||
-          lastState.canvasInfo.dpr !== canvasInfo.dpr
-        )
+        controls.textSuperSample !== stateRef.current.lastTextSuperSample ||
+        stateRef.current.lastTextCanvasWidth !== canvasInfo.width ||
+        stateRef.current.lastTextCanvasHeight !== canvasInfo.height ||
+        stateRef.current.lastTextCanvasDpr !== canvasInfo.dpr
       ) {
         stateRef.current.textSDFDirty = true;
         stateRef.current.lastTextEnabled = controls.textEnabled;
         stateRef.current.lastTextContent = controls.textContent;
         stateRef.current.lastTextSize = controls.textSize;
         stateRef.current.lastTextFont = controls.textFont;
+        stateRef.current.lastTextSuperSample = controls.textSuperSample;
+        stateRef.current.lastTextCanvasWidth = canvasInfo.width;
+        stateRef.current.lastTextCanvasHeight = canvasInfo.height;
+        stateRef.current.lastTextCanvasDpr = canvasInfo.dpr;
       }
 
       if (controls.textEnabled && stateRef.current.textSDFDirty) {
@@ -667,6 +673,7 @@ function App() {
           controls.textFont,
           sdfWidth,
           sdfHeight,
+          controls.textSuperSample,
         );
         stateRef.current.textSDFTexture = uploadTextSDFTexture(
           gl,
@@ -694,7 +701,7 @@ function App() {
           u_shadowPosition: [-controls.shadowPosition.x, -controls.shadowPosition.y],
           u_textSDF: textSDFTexture,
           u_textEnabled: controls.textEnabled ? 1 : 0,
-          u_textScale: 80.0,
+          u_textScale: 2 * SDF_RANGE,
         },
         mainPass: {
           u_tint: [
@@ -734,7 +741,7 @@ function App() {
           u_toneMappingType: controls.hdrToneMappingType,
           u_textSDF: textSDFTexture,
           u_textEnabled: controls.textEnabled ? 1 : 0,
-          u_textScale: 80.0,
+          u_textScale: 2 * SDF_RANGE,
           STEP: controls.step,
         },
       });

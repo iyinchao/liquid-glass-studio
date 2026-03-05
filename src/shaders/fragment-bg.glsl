@@ -100,6 +100,7 @@ float sdgMin(float a, float b) {
 }
 
 float mainSDF(vec2 p1, vec2 p2, vec2 p) {
+  float d;
   if (u_shapeCount > 0) {
     float result = 1.0;
     bool hasShape = false;
@@ -111,7 +112,7 @@ float mainSDF(vec2 p1, vec2 p2, vec2 p) {
       float shapeR = u_shapeParams[i].x;
       float shapeN = u_shapeParams[i].y;
       vec2 pn = (-shapeCenter) / u_resolution.y + p / u_resolution.y;
-      float d = roundedRectSDF(
+      float dd = roundedRectSDF(
         pn,
         vec2(0.0),
         shapeW / u_resolution.y,
@@ -120,28 +121,28 @@ float mainSDF(vec2 p1, vec2 p2, vec2 p) {
         shapeN
       );
       if (!hasShape) {
-        result = d;
+        result = dd;
         hasShape = true;
       } else {
-        result = smin(result, d, u_mergeRate);
+        result = smin(result, dd, u_mergeRate);
       }
     }
-    return result;
+    d = result;
+  } else {
+    vec2 p1n = p1 + p / u_resolution.y;
+    vec2 p2n = p2 + p / u_resolution.y;
+    float d1 = u_showShape1 == 1 ? sdCircle(p1n, 100.0 * u_dpr / u_resolution.y) : 1.0;
+    float d2 = roundedRectSDF(
+      p2n,
+      vec2(0.0),
+      u_shapeWidth / u_resolution.y,
+      u_shapeHeight / u_resolution.y,
+      u_shapeRadius / u_resolution.y,
+      u_shapeRoundness
+    );
+
+    d = smin(d1, d2, u_mergeRate);
   }
-
-  vec2 p1n = p1 + p / u_resolution.y;
-  vec2 p2n = p2 + p / u_resolution.y;
-  float d1 = u_showShape1 == 1 ? sdCircle(p1n, 100.0 * u_dpr / u_resolution.y) : 1.0;
-  float d2 = roundedRectSDF(
-    p2n,
-    vec2(0.0),
-    u_shapeWidth / u_resolution.y,
-    u_shapeHeight / u_resolution.y,
-    u_shapeRadius / u_resolution.y,
-    u_shapeRoundness
-  );
-
-  float d = smin(d1, d2, u_mergeRate);
 
   if (u_textEnabled == 1) {
     vec2 uv = p / u_resolution.xy;

@@ -276,7 +276,7 @@ export const useLevaControls = ({
         textSize: {
           label: lang['editor.textSize'],
           min: 20,
-          max: 200,
+          max: 500,
           step: 1,
           value: 80,
         },
@@ -292,6 +292,13 @@ export const useLevaControls = ({
             'Verdana': 'Verdana',
             'Impact': 'Impact',
           },
+        },
+        textSuperSample: {
+          label: lang['editor.textSuperSample'],
+          min: 1,
+          max: 4,
+          step: 1,
+          value: 2,
         },
       }, {
         collapsed: true,

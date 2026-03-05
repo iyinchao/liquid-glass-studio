@@ -8,10 +8,11 @@
  * 4. Return a Uint8Array suitable for WebGL texture upload (single-channel R8)
  */
 
-const SDF_RANGE = 40; // max distance in pixels stored in the SDF
+export const SDF_RANGE = 128; // max distance in pixels stored in the SDF
+export const SDF_SUPERSAMPLE_DEFAULT = 2; // default render SDF at Nx screen resolution
 
 interface TextSDFResult {
-  data: Uint8Array;
+  data: Float32Array;
   width: number;
   height: number;
 }
@@ -100,27 +101,33 @@ export function generateTextSDF(
   fontFamily: string,
   canvasWidth: number,
   canvasHeight: number,
+  supersample: number = SDF_SUPERSAMPLE_DEFAULT,
 ): TextSDFResult {
-  // Create offscreen canvas
+  // Supersample for higher resolution SDF
+  const sdfW = canvasWidth * supersample;
+  const sdfH = canvasHeight * supersample;
+  const sdfFontSize = fontSize * supersample;
+
+  // Create offscreen canvas at supersampled resolution
   const canvas = document.createElement('canvas');
-  canvas.width = canvasWidth;
-  canvas.height = canvasHeight;
+  canvas.width = sdfW;
+  canvas.height = sdfH;
   const ctx = canvas.getContext('2d')!;
 
   // Clear to transparent
-  ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+  ctx.clearRect(0, 0, sdfW, sdfH);
 
   // Render text centered
   ctx.fillStyle = 'white';
-  ctx.font = `bold ${fontSize}px ${fontFamily}`;
+  ctx.font = `bold ${sdfFontSize}px ${fontFamily}`;
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
-  ctx.fillText(text, canvasWidth / 2, canvasHeight / 2);
+  ctx.fillText(text, sdfW / 2, sdfH / 2);
 
   // Extract alpha channel as mask
-  const imageData = ctx.getImageData(0, 0, canvasWidth, canvasHeight);
+  const imageData = ctx.getImageData(0, 0, sdfW, sdfH);
   const pixels = imageData.data;
-  const size = canvasWidth * canvasHeight;
+  const size = sdfW * sdfH;
   const mask = new Uint8Array(size);
 
   for (let i = 0; i < size; i++) {
@@ -128,23 +135,22 @@ export function generateTextSDF(
   }
 
   // Compute distance fields for inside and outside
-  const outsideDist = computeDistanceField(mask, canvasWidth, canvasHeight, false);
-  const insideDist = computeDistanceField(mask, canvasWidth, canvasHeight, true);
+  const outsideDist = computeDistanceField(mask, sdfW, sdfH, false);
+  const insideDist = computeDistanceField(mask, sdfW, sdfH, true);
 
-  // Combine into signed distance field, map to 0-255
+  // Combine into signed distance field as float (full precision)
   // 0.5 = on the boundary, >0.5 = outside, <0.5 = inside
-  const sdfData = new Uint8Array(size);
+  const sdfData = new Float32Array(size);
+  const sdfRange = SDF_RANGE * supersample;
   for (let i = 0; i < size; i++) {
-    const signedDist = outsideDist[i] - insideDist[i];
-    // Map [-SDF_RANGE, +SDF_RANGE] to [0, 255]
-    const normalized = 0.5 + (signedDist / (2 * SDF_RANGE));
-    sdfData[i] = Math.max(0, Math.min(255, Math.round(normalized * 255)));
+    const signedDist = insideDist[i] - outsideDist[i];
+    sdfData[i] = Math.max(0, Math.min(1, 0.5 + signedDist / (2 * sdfRange)));
   }
 
   return {
     data: sdfData,
-    width: canvasWidth,
-    height: canvasHeight,
+    width: sdfW,
+    height: sdfH,
   };
 }
 
@@ -158,17 +164,21 @@ export function uploadTextSDFTexture(
 ): WebGLTexture {
   const texture = existingTexture ?? gl.createTexture()!;
 
+  // Enable linear filtering for float textures (required by WebGL2)
+  gl.getExtension('OES_texture_float_linear');
+
   gl.bindTexture(gl.TEXTURE_2D, texture);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 4);
   gl.texImage2D(
     gl.TEXTURE_2D,
     0,
-    gl.R8,
+    gl.R32F,
     sdfResult.width,
     sdfResult.height,
     0,
     gl.RED,
-    gl.UNSIGNED_BYTE,
+    gl.FLOAT,
     sdfResult.data,
   );
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
