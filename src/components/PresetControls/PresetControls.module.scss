@@ -21,3 +21,16 @@
   flex-wrap: wrap;
   gap: 4px;
 }
+
+.showcaseActive {
+  animation: showcasePulse 2s ease-in-out infinite;
+}
+
+@keyframes showcasePulse {
+  0%, 100% {
+    box-shadow: 0 0 4px rgba(100, 180, 255, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 10px rgba(100, 180, 255, 0.7);
+  }
+}

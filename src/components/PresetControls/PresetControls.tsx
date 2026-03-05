@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { LevaButton } from '../LevaButton/LevaButton';
 import { exportPreset, importPreset, BUILT_IN_PRESETS } from '../../utils/presetUtils';
+import { SHOWCASE_DEMOS } from '../../utils/showcaseAnimations';
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import styles from './PresetControls.module.scss';
@@ -10,9 +11,12 @@ export interface PresetControlsProps {
   controls: ReturnType<typeof useLevaControls>['controls'];
   controlsAPI: ReturnType<typeof useLevaControls>['controlsAPI'];
   lang: ReturnType<typeof useLevaControls>['lang'];
+  activeShowcase: string | null;
+  onStartShowcase: (id: string) => void;
+  onStopShowcase: () => void;
 }
 
-export const PresetControls = ({ controls, controlsAPI, lang }: PresetControlsProps) => {
+export const PresetControls = ({ controls, controlsAPI, lang, activeShowcase, onStartShowcase, onStopShowcase }: PresetControlsProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [activePresetId, setActivePresetId] = useState<string | null>(null);
 
@@ -109,6 +113,36 @@ export const PresetControls = ({ controls, controlsAPI, lang }: PresetControlsPr
               {getPresetName(preset.id)}
             </LevaButton>
           ))}
+        </div>
+      </div>
+
+      <div className={styles.presetSection}>
+        <div className={styles.presetLabel}>
+          {(lang as Record<string, unknown>)['editor.showcase'] as string || 'Showcase'}
+        </div>
+        <div className={styles.presetGrid}>
+          {SHOWCASE_DEMOS.map((demo) => {
+            const isActive = activeShowcase === demo.id;
+            const labelKey = `editor.showcase.${demo.id}` as keyof typeof lang;
+            const label = (lang[labelKey] as string) || demo.id;
+            return (
+              <LevaButton
+                key={demo.id}
+                active={isActive}
+                onClick={() => {
+                  if (isActive) {
+                    onStopShowcase();
+                  } else {
+                    onStartShowcase(demo.id);
+                  }
+                }}
+                title={label}
+                className={isActive ? styles.showcaseActive : undefined}
+              >
+                {label}
+              </LevaButton>
+            );
+          })}
         </div>
       </div>
     </div>

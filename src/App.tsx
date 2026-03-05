@@ -50,6 +50,7 @@ import PlayCircleOutlinedIcon from '@mui/icons-material/PlayCircleOutlined';
 import FileUploadOutlinedIcon from '@mui/icons-material/FileUploadOutlined';
 import { useLevaControls } from './Controls';
 import { PresetControls } from './components/PresetControls/PresetControls';
+import { SHOWCASE_DEMOS, getShowcaseFrame } from './utils/showcaseAnimations';
 import {
   createUIContentCanvas,
   renderUIContent,
@@ -84,6 +85,14 @@ function App() {
   const [selectedShapeId, setSelectedShapeId] = useState<string | null>(null);
   const editorShapesRef = useRef<ShapeDef[]>([]);
   editorShapesRef.current = editorShapes;
+
+  // Showcase animation state
+  const [activeShowcase, setActiveShowcase] = useState<string | null>(null);
+  const showcaseStartRef = useRef<number>(0);
+  const preShowcaseControls = useRef<Record<string, any> | null>(null);
+  const activeShowcaseRef = useRef<string | null>(null);
+  activeShowcaseRef.current = activeShowcase;
+  const controlsAPIRef = useRef<any>(null);
 
   const { controls, lang, langName, levaGlobal, controlsAPI } = useLevaControls({
     containerRender: {
@@ -351,6 +360,7 @@ function App() {
   });
   stateRef.current.canvasInfo = canvasInfo;
   stateRef.current.controls = controls;
+  controlsAPIRef.current = controlsAPI;
   stateRef.current.langName = langName;
 
   // Sync WebGPU toggle from controls to state (triggers effect re-run)
@@ -387,6 +397,20 @@ function App() {
   useMemo(() => {
     stateRef.current.blurWeights = computeGaussianKernelByRadius(controls.blurRadius);
   }, [controls.blurRadius]);
+
+  const startShowcase = useCallback((id: string) => {
+    preShowcaseControls.current = structuredClone(controls);
+    showcaseStartRef.current = performance.now() / 1000;
+    setActiveShowcase(id);
+  }, [controls]);
+
+  const stopShowcase = useCallback(() => {
+    setActiveShowcase(null);
+    if (preShowcaseControls.current && typeof controlsAPI === 'function') {
+      controlsAPI(preShowcaseControls.current);
+      preShowcaseControls.current = null;
+    }
+  }, [controlsAPI]);
 
   const centerizeCanvasWindow = useCallback(() => {
     const ctrl = stateRef.current.canvasWindowCtrlRef;
@@ -716,6 +740,25 @@ function App() {
         }
 
         const controls = stateRef.current.controls;
+
+        // Showcase animation: apply interpolated values every 3rd frame
+        const showcaseId = activeShowcaseRef.current;
+        if (showcaseId && fpsFrameCount % 3 === 0) {
+          const demo = SHOWCASE_DEMOS.find((d) => d.id === showcaseId);
+          if (demo) {
+            const elapsed = now / 1000 - showcaseStartRef.current;
+            const frame = getShowcaseFrame(demo, elapsed);
+            if (typeof controlsAPIRef.current === 'function') {
+              controlsAPIRef.current(frame.values);
+            }
+            if (frame.mouse) {
+              const cx = frame.mouse[0] * canvasInfo.width * canvasInfo.dpr;
+              const cy = (1 - frame.mouse[1]) * canvasInfo.height * canvasInfo.dpr;
+              stateRef.current.mouseSpring.start({ x: cx, y: cy });
+            }
+          }
+        }
+
         const mouseSpring = stateRef.current.mouseSpring.get();
 
         const shapeSizeSpring = {
@@ -973,6 +1016,9 @@ function App() {
         controls={controls}
         controlsAPI={controlsAPI}
         lang={lang}
+        activeShowcase={activeShowcase}
+        onStartShowcase={startShowcase}
+        onStopShowcase={stopShowcase}
       />
       <ResizableWindow
         disableMove
