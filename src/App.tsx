@@ -10,10 +10,12 @@ import {
 import styles from './App.module.scss';
 import {
   createEmptyTexture,
+  createHDRTexture,
   loadTextureFromURL,
   MultiPassRenderer,
   updateVideoTexture,
 } from './utils/GLUtils';
+import { isHDRFile, loadHDRFile } from './utils/hdrLoader';
 import { ResizableWindow } from './components/ResizableWindow';
 import type { ResizeWindowCtrlRefType } from './components/ResizableWindow/ResizableWindow';
 
@@ -74,7 +76,7 @@ function App() {
     containerRender: {
       /* eslint-disable react-hooks/rules-of-hooks */
       bgType: ({ value, setValue }) => {
-        const [customFileType, setCustomFileType] = useState<null | 'image' | 'video'>(null);
+        const [customFileType, setCustomFileType] = useState<null | 'image' | 'video' | 'hdr'>(null);
         const [customFile, setCustomFile] = useState<null | File>(null);
         const [customFileUrl, setCustomFileUrl] = useState<null | string>(null);
         const fileInputRef = useRef<HTMLInputElement>(null);
@@ -121,6 +123,8 @@ function App() {
                       stateRef.current.bgTextureUrl = mediaUrl;
                       if (mediaType === 'video') {
                         stateRef.current.bgTextureType = 'video';
+                      } else if (mediaType === 'hdr') {
+                        stateRef.current.bgTextureType = 'hdr';
                       } else {
                         stateRef.current.bgTextureType = 'image';
                       }
@@ -154,29 +158,33 @@ function App() {
                     <>
                       <input
                         type="file"
-                        accept="image/*,video/*"
+                        accept="image/*,video/*,.hdr"
                         ref={fileInputRef}
                         multiple={false}
                         onChange={(e) => {
                           if (!e.target.files?.[0]) {
                             return;
                           }
-                          setCustomFile(e.target.files[0]);
+                          const file = e.target.files[0];
+                          setCustomFile(file);
                           if (customFileUrl) {
                             URL.revokeObjectURL(customFileUrl);
                           }
-                          const newUrl = URL.createObjectURL(e.target.files[0]);
+                          const newUrl = URL.createObjectURL(file);
                           setCustomFileUrl(newUrl);
-                          const fileType = e.target.files[0].type.startsWith('image/')
-                            ? 'image'
-                            : 'video';
+                          const fileType: 'image' | 'video' | 'hdr' = isHDRFile(file)
+                            ? 'hdr'
+                            : file.type.startsWith('image/')
+                              ? 'image'
+                              : file.type.startsWith('video/')
+                                ? 'video'
+                                : 'image';
                           setCustomFileType(fileType);
                           setValue(v);
                           stateRef.current.bgTextureUrl = newUrl;
-                          if (fileType === 'video') {
-                            stateRef.current.bgTextureType = 'video';
-                          } else {
-                            stateRef.current.bgTextureType = 'image';
+                          stateRef.current.bgTextureType = fileType;
+                          if (fileType === 'hdr') {
+                            stateRef.current.hdrFile = file;
                           }
                         }}
                       ></input>
@@ -233,7 +241,9 @@ function App() {
     bgTextureUrl: string | null;
     bgTexture: WebGLTexture | null;
     bgTextureRatio: number;
-    bgTextureType: 'image' | 'video' | null;
+    bgTextureType: 'image' | 'video' | 'hdr' | null;
+    hdrFile: File | null;
+    isHDRContent: boolean;
     bgTextureReady: boolean;
     bgVideoEls: Map<number, HTMLVideoElement>;
     langName: typeof langName;
@@ -307,6 +317,8 @@ function App() {
     bgTexture: null,
     bgTextureRatio: 1,
     bgTextureType: null,
+    hdrFile: null,
+    isHDRContent: false,
     bgTextureReady: false,
     bgVideoEls: new Map(),
     langName: langName,
@@ -417,7 +429,20 @@ function App() {
     };
     canvasEl.addEventListener('pointermove', onPointerMove);
 
-    const gl = canvasEl.getContext('webgl2');
+    let gl: WebGL2RenderingContext | null = null;
+    try {
+      gl = canvasEl.getContext('webgl2', { colorSpace: 'display-p3' } as WebGLContextAttributes);
+      if (gl) {
+        try {
+          (gl as any).drawingBufferColorSpace = 'display-p3';
+          console.log('[Liquid Glass] 10-bit display-p3 canvas enabled');
+        } catch {
+          console.log('[Liquid Glass] display-p3 drawingBufferColorSpace not supported, using sRGB');
+        }
+      }
+    } catch {
+      gl = canvasEl.getContext('webgl2');
+    }
     if (!gl) {
       return;
     }
@@ -511,9 +536,11 @@ function App() {
             gl.deleteTexture(stateRef.current.bgTexture);
             stateRef.current.bgTexture = null;
             stateRef.current.bgTextureType = null;
+            stateRef.current.isHDRContent = false;
           }
         } else {
           if (stateRef.current.bgTextureType === 'image') {
+            stateRef.current.isHDRContent = false;
             const rafId = requestAnimationFrame(() => {
               stateRef.current.bgTextureReady = false;
             });
@@ -526,9 +553,26 @@ function App() {
               }
             });
           } else if (stateRef.current.bgTextureType === 'video') {
+            stateRef.current.isHDRContent = false;
             stateRef.current.bgTextureReady = false;
             stateRef.current.bgTexture = createEmptyTexture(gl);
             stateRef.current.bgVideoEls.get(stateRef.current.controls.bgType)?.play();
+          } else if (stateRef.current.bgTextureType === 'hdr' && stateRef.current.hdrFile) {
+            stateRef.current.bgTextureReady = false;
+            stateRef.current.isHDRContent = true;
+            const hdrFile = stateRef.current.hdrFile;
+            loadHDRFile(hdrFile).then((hdrData) => {
+              if (stateRef.current.bgTextureUrl === textureUrl) {
+                const { texture, ratio } = createHDRTexture(gl, hdrData);
+                stateRef.current.bgTexture = texture;
+                stateRef.current.bgTextureRatio = ratio;
+                stateRef.current.bgTextureReady = true;
+                // Auto-enable HDR mode for HDR content
+                controlsAPI.set({ hdrEnabled: true, hdrToneMappingType: 2 });
+              }
+            }).catch((err) => {
+              console.error('[Liquid Glass] Failed to load HDR file:', err);
+            });
           }
         }
       }
@@ -739,6 +783,7 @@ function App() {
           u_hdrEnabled: controls.hdrEnabled ? 1 : 0,
           u_exposure: controls.hdrExposure,
           u_toneMappingType: controls.hdrToneMappingType,
+          u_bloom: controls.hdrBloom,
           u_textSDF: textSDFTexture,
           u_textEnabled: controls.textEnabled ? 1 : 0,
           u_textScale: 2 * SDF_RANGE,

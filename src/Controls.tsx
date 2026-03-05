@@ -207,7 +207,7 @@ export const useLevaControls = ({
         hdrExposure: {
           label: lang['editor.hdrExposure'],
           min: 0.1,
-          max: 5.0,
+          max: 10.0,
           step: 0.01,
           value: 1.0,
         },
@@ -219,6 +219,13 @@ export const useLevaControls = ({
             'Reinhard': 1,
             'ACES': 2,
           },
+        },
+        hdrBloom: {
+          label: lang['editor.hdrBloom'],
+          min: 0,
+          max: 1.0,
+          step: 0.01,
+          value: 0,
         },
       }, {
         collapsed: true,

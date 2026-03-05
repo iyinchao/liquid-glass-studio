@@ -41,6 +41,7 @@ uniform float u_emissivePulse;
 uniform int u_hdrEnabled;
 uniform float u_exposure;
 uniform int u_toneMappingType;
+uniform float u_bloom;
 
 uniform sampler2D u_uiContent;
 uniform int u_uiContentEnabled;
@@ -851,6 +852,13 @@ void main() {
   // HDR tone mapping
   if (u_hdrEnabled == 1) {
     outColor.rgb *= u_exposure;
+
+    // Bloom: extract bright areas and add soft glow
+    if (u_bloom > 0.0) {
+      vec3 bright = max(outColor.rgb - vec3(1.0), vec3(0.0));
+      outColor.rgb += bright * u_bloom;
+    }
+
     if (u_toneMappingType == 1) {
       outColor.rgb = Reinhard(outColor.rgb);
     } else if (u_toneMappingType == 2) {

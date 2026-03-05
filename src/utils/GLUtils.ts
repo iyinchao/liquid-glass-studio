@@ -676,6 +676,49 @@ export function createEmptyTexture(gl: WebGL2RenderingContext): WebGLTexture {
  * @param texture WebGLTexture，需要事先 create 并配置好参数
  * @param video HTMLVideoElement，正在播放的视频
  */
+// HDR texture creation from parsed float RGB data
+export function createHDRTexture(
+  gl: WebGL2RenderingContext,
+  hdrData: { width: number; height: number; data: Float32Array },
+): { texture: WebGLTexture; ratio: number } {
+  const texture = gl.createTexture();
+  if (!texture) throw new Error('Failed to create HDR texture');
+
+  // Expand RGB → RGBA (alpha = 1.0)
+  const rgba = new Float32Array(hdrData.width * hdrData.height * 4);
+  for (let i = 0; i < hdrData.width * hdrData.height; i++) {
+    rgba[i * 4] = hdrData.data[i * 3];
+    rgba[i * 4 + 1] = hdrData.data[i * 3 + 1];
+    rgba[i * 4 + 2] = hdrData.data[i * 3 + 2];
+    rgba[i * 4 + 3] = 1.0;
+  }
+
+  // Check for float linear filtering support
+  const hasFloatLinear = !!gl.getExtension('OES_texture_float_linear');
+
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(
+    gl.TEXTURE_2D,
+    0,
+    gl.RGBA16F,
+    hdrData.width,
+    hdrData.height,
+    0,
+    gl.RGBA,
+    gl.FLOAT,
+    rgba,
+  );
+
+  const filterMode = hasFloatLinear ? gl.LINEAR : gl.NEAREST;
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filterMode);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filterMode);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+  return { texture, ratio: hdrData.width / hdrData.height };
+}
+
 export function updateVideoTexture(
   gl: WebGL2RenderingContext,
   texture: WebGLTexture,
