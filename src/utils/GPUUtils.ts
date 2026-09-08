@@ -474,7 +474,7 @@ export class GPUMultiPassRenderer implements IMultiPassRenderer {
    * 144     u_glareConvergence       f32      4
    * 148     u_glareOppositeFactor    f32      4
    * 152     u_glareFactor            f32      4
-   * 156     _pad1                    f32      4
+   * 156     u_refDistance            f32      4   (reuses former _pad1 slot)
    * Total: 160 bytes
    */
   private createMainUniformBuffer(uniforms: Record<string, any>): GPUBuffer {
@@ -552,8 +552,8 @@ export class GPUMultiPassRenderer implements IMultiPassRenderer {
     f32[37] = uniforms.u_glareOppositeFactor ?? 0.8;
     // u_glareFactor (offset 152)
     f32[38] = uniforms.u_glareFactor ?? 0.9;
-    // _pad1 (offset 156)
-    f32[39] = 0;
+    // u_refDistance (offset 156, reuses former _pad1 slot — keeps buffer at 160 bytes)
+    f32[39] = uniforms.u_refDistance ?? 0.05;
 
     const buffer = this.device.createBuffer({
       size: BUFFER_SIZE,

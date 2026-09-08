@@ -76,6 +76,13 @@ export const useLevaControls = ({
         step: 0.01,
         value: 20,
       },
+      refDistance: {
+        label: lang['editor.refDistance'],
+        min: 0,
+        max: 0.2,
+        step: 0.001,
+        value: 0.05,
+      },
       refFactor: {
         label: lang['editor.refFactor'],
         min: 1,

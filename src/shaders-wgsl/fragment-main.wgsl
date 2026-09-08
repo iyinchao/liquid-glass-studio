@@ -39,7 +39,7 @@ struct Uniforms {
   u_glareConvergence: f32,
   u_glareOppositeFactor: f32,
   u_glareFactor: f32,
-  _pad1: f32,
+  u_refDistance: f32,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -143,7 +143,7 @@ fn fs_main(@builtin(position) frag_coord: vec4f, @location(0) v_uv: vec2f) -> @l
 
       // Normal is in GLSL bottom-up coords (Y up), but v_uv.y is top-down (Y down).
       // Flip the Y component of the offset to match v_uv orientation.
-      let refOffset = -normal * edgeFactor * 0.05 * u.u_dpr * vec2f(
+      let refOffset = -normal * edgeFactor * u.u_refDistance * u.u_dpr * vec2f(
         u.u_resolution.y / (u_resolution1x.x * u.u_dpr),
         1.0
       );
