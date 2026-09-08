@@ -22,6 +22,7 @@ uniform float u_shapeRadius;
 uniform float u_shapeRoundness;
 uniform vec4 u_tint;
 uniform float u_refThickness;
+uniform float u_refDistance;
 uniform float u_refFactor;
 uniform float u_refDispersion;
 uniform float u_refFresnelRange;
@@ -271,7 +272,7 @@ void main() {
           v_uv -
             normal *
               edgeFactor *
-              0.05 *
+              u_refDistance *
               u_dpr *
               vec2(
                 u_resolution.y / u_resolution1x.x, /* resolution independent */
@@ -331,7 +332,7 @@ void main() {
           v_uv -
             normal *
               edgeFactor *
-              0.05 *
+              u_refDistance *
               u_dpr *
               vec2(
                 u_resolution.y / u_resolution1x.x, /* resolution independent */
@@ -410,7 +411,7 @@ void main() {
           v_uv -
             normal *
               edgeFactor *
-              0.05 *
+              u_refDistance *
               u_dpr *
               vec2(
                 u_resolution.y / u_resolution1x.x, /* resolution independent */
@@ -494,7 +495,7 @@ void main() {
             : edgeH,
           -normal *
             edgeFactor *
-            0.05 *
+            u_refDistance *
             u_dpr *
             vec2(
               u_resolution.y / (u_resolution1x.x * u_dpr), /* resolution independent */

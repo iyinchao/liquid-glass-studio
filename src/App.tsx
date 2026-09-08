@@ -668,6 +668,7 @@ function App() {
             controls.tint.a,
           ],
           u_refThickness: controls.refThickness,
+          u_refDistance: controls.refDistance,
           u_refFactor: controls.refFactor,
           u_refDispersion: controls.refDispersion,
           u_refFresnelRange: controls.refFresnelRange,
