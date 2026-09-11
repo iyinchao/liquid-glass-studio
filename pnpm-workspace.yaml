@@ -1,0 +1,7 @@
+# Dependencies whose install scripts are allowed to run. pnpm blocks build
+# scripts by default; these three compile or download the native binaries the
+# dev server and build depend on.
+allowBuilds:
+  '@parcel/watcher': true
+  '@swc/core': true
+  esbuild: true
