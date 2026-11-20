@@ -8,7 +8,7 @@ The Ultimate Web Recreation of Apple’s Liquid Glass UI, powered by WebGL2 & We
 
 ## Online Demo
 
-https://liquid-glass-studio.vercel.app/
+https://liquid-glass.yinchao.dev/
 
 For users in mainland China, please visit:  
 https://liquid-glass.iyinchao.cn/

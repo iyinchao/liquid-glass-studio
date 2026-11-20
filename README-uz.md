@@ -9,7 +9,7 @@ Sozlanadigan parametrlar orqali siz barcha “liquid glass” effektlarini sinab
 
 ## Online Demo
 
-https://liquid-glass-studio.vercel.app/
+https://liquid-glass.yinchao.dev/
 
 Xitoylik foydalanuvchilar uchun:
 https://liquid-glass.iyinchao.cn/
