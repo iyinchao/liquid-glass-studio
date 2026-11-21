@@ -1,4 +1,5 @@
 import { type useLevaControls } from '../Controls';
+import languages from './languages';
 export interface PresetData {
   version: string;
   timestamp: string;
@@ -48,10 +49,21 @@ export function importPreset(file: File): Promise<PresetData> {
         // All imported presets now use continuous corners.
         delete currentControls.shapeModel;
         delete currentControls.shapeRoundness;
+        // Earlier presets stored the selected language as a one-item array.
+        const savedLanguage: unknown = currentControls.language;
+        if (savedLanguage !== undefined) {
+          const language = Array.isArray(savedLanguage) ? savedLanguage[0] : savedLanguage;
+          if (typeof language === 'string' && Object.prototype.hasOwnProperty.call(languages, language)) {
+            currentControls.language = language;
+          } else {
+            delete (currentControls as Partial<typeof currentControls>).language;
+          }
+        }
         const coverage = currentControls.darkEdgeRange ?? (50 + transition / 2);
         // Presets exported before dark edges keep their original appearance.
         preset.controls = {
           ...currentControls,
+          showCursor: preset.controls.showCursor ?? false,
           shapeSmoothing: preset.controls.shapeSmoothing ?? 100,
           darkEdgeWidth: preset.controls.darkEdgeWidth ?? 1,
           darkEdgeFactor: preset.controls.darkEdgeFactor ?? 0,

@@ -779,6 +779,7 @@ function App() {
             style={
               {
                 ['--dpr']: canvasInfo.dpr,
+                cursor: controls.showCursor ? 'default' : 'none',
               } as CSSProperties
             }
           />
