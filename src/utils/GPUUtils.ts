@@ -450,7 +450,7 @@ export class GPUMultiPassRenderer implements IMultiPassRenderer {
    * 32      u_shapeWidth             f32      4
    * 36      u_shapeHeight            f32      4
    * 40      u_shapeRadius            f32      4
-   * 44      u_shapeRoundness         f32      4
+   * 44      padding                  f32      4
    * 48      u_mergeRate              f32      4
    * 52      u_glareAngle             f32      4
    * 56      u_shadowExpand           f32      4
@@ -475,10 +475,21 @@ export class GPUMultiPassRenderer implements IMultiPassRenderer {
    * 148     u_glareOppositeFactor    f32      4
    * 152     u_glareFactor            f32      4
    * 156     u_refDistance            f32      4   (reuses former _pad1 slot)
-   * Total: 160 bytes
+   * 160     u_darkEdgeWidth         f32      4
+   * 164     u_darkEdgeFactor        f32      4
+   * 168     u_darkEdgeSoftness      f32      4
+   * 172     u_darkEdgeFade          f32      4
+   * 176     u_darkEdgeRange         f32      4
+   * 180     u_contourCount          i32      4
+   * 184     u_darkEdgeLighting      f32      4
+   * 188     padding                 i32      4
+   * 192     u_cornerHorizontal      vec4f    16
+   * 208     u_cornerVertical        vec4f    16
+   * 224     u_contourPoints         vec4f[128] 2048
+   * Total: 2272 bytes
    */
   private createMainUniformBuffer(uniforms: Record<string, any>): GPUBuffer {
-    const BUFFER_SIZE = 160;
+    const BUFFER_SIZE = 2272;
     const data = new ArrayBuffer(BUFFER_SIZE);
     const f32 = new Float32Array(data);
     const i32 = new Int32Array(data);
@@ -502,8 +513,8 @@ export class GPUMultiPassRenderer implements IMultiPassRenderer {
     f32[9] = uniforms.u_shapeHeight ?? 200;
     // u_shapeRadius (offset 40)
     f32[10] = uniforms.u_shapeRadius ?? 80;
-    // u_shapeRoundness (offset 44)
-    f32[11] = uniforms.u_shapeRoundness ?? 5;
+    // Reserved alignment slot (offset 44)
+    f32[11] = 0;
     // u_mergeRate (offset 48)
     f32[12] = uniforms.u_mergeRate ?? 0.05;
     // u_glareAngle (offset 52)
@@ -552,8 +563,20 @@ export class GPUMultiPassRenderer implements IMultiPassRenderer {
     f32[37] = uniforms.u_glareOppositeFactor ?? 0.8;
     // u_glareFactor (offset 152)
     f32[38] = uniforms.u_glareFactor ?? 0.9;
-    // u_refDistance (offset 156, reuses former _pad1 slot — keeps buffer at 160 bytes)
+    // u_refDistance (offset 156)
     f32[39] = uniforms.u_refDistance ?? 0.05;
+    // Dark edge controls (offsets 160, 164, 168, 172)
+    f32[40] = uniforms.u_darkEdgeWidth ?? 1;
+    f32[41] = uniforms.u_darkEdgeFactor ?? 0;
+    f32[42] = uniforms.u_darkEdgeSoftness ?? 0;
+    f32[43] = uniforms.u_darkEdgeFade ?? 0.67;
+    f32[44] = uniforms.u_darkEdgeRange ?? 0.75;
+    i32[45] = uniforms.u_contourCount ?? 0;
+    f32[46] = uniforms.u_darkEdgeLighting ?? 0.25;
+    i32[47] = 0; // Reserved alignment slot (offset 188)
+    f32.set(uniforms.u_cornerHorizontal ?? [0, 0, 0, 0], 48);
+    f32.set(uniforms.u_cornerVertical ?? [0, 0, 0, 0], 52);
+    if (uniforms.u_contourPoints) f32.set(uniforms.u_contourPoints, 56);
 
     const buffer = this.device.createBuffer({
       size: BUFFER_SIZE,

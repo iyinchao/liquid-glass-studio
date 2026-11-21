@@ -158,7 +158,7 @@ export const useLevaControls = ({
         min: -180,
         max: 180,
         step: 0.01,
-        value: -45,
+        value: 0,
       },
       blurRadius: {
         label: lang['editor.blurRadius'],
@@ -208,6 +208,51 @@ export const useLevaControls = ({
       //   // alphaPatternColorA: '#bbb',
       //   // alphaPatternColorB: '#eee',
       // }),
+      darkEdgeSettings: folder({
+        darkEdgeFactor: {
+          label: lang['editor.darkEdgeFactor'],
+          min: 0,
+          max: 100,
+          step: 1,
+          value: 60,
+        },
+        darkEdgeWidth: {
+          label: lang['editor.darkEdgeWidth'],
+          min: 0,
+          max: 10,
+          step: 0.1,
+          value: 1,
+        },
+        darkEdgeRange: {
+          label: lang['editor.darkEdgeRange'],
+          min: 0,
+          max: 100,
+          step: 1,
+          value: 75,
+        },
+        darkEdgeFade: {
+          label: lang['editor.darkEdgeFade'],
+          min: 0,
+          max: 100,
+          step: 1,
+          value: 67,
+        },
+        darkEdgeSoftness: {
+          label: lang['editor.darkEdgeSoftness'],
+          min: 0,
+          max: 5,
+          step: 0.1,
+          value: 0,
+        },
+        darkEdgeLighting: {
+          render: () => false,
+          label: <span title={lang['editor.darkEdgeLightingHint']}>{lang['editor.darkEdgeLighting']}</span>,
+          min: 0,
+          max: 100,
+          step: 1,
+          value: 25,
+        },
+      }, { collapsed: true }),
       ['shapeSettings']: folder({
         shapeWidth: {
           label: lang['editor.shapeWidth'],
@@ -228,14 +273,14 @@ export const useLevaControls = ({
           min: 1,
           max: 100,
           step: 0.1,
-          value: 80,
+          value: 50,
         },
-        shapeRoundness: {
-          label: lang['editor.shapeRoundness'],
-          min: 2,
-          max: 7,
-          step: 0.01,
-          value: 5,
+        shapeSmoothing: {
+          label: lang['editor.shapeSmoothing'],
+          min: 0,
+          max: 100,
+          step: 1,
+          value: 100,
         },
         mergeRate: {
           label: lang['editor.mergeRate'],

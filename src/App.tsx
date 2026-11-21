@@ -22,6 +22,8 @@ import {
   gpuUpdateVideoTexture,
 } from './utils/GPUUtils';
 import { detectWebGPU, type WebGPUDetectResult } from './utils/gpuDetect';
+import { buildSmoothCorners } from './utils/smoothShapeUtils';
+import { buildRectangleContour, type RectangleGeometry, MAX_CONTOUR_POINTS } from './utils/contourUtils';
 import { ResizableWindow } from './components/ResizableWindow';
 import type { ResizeWindowCtrlRefType } from './components/ResizableWindow/ResizableWindow';
 
@@ -488,6 +490,9 @@ function App() {
       bgTextureType: null as typeof stateRef.current.bgTextureType,
       bgTextureUrl: null as typeof stateRef.current.bgTextureUrl,
     };
+    let contourKey = '';
+    let corners = buildSmoothCorners({ width: 200, height: 200, radius: 80, smoothing: 1 });
+    let contour = { points: new Float32Array(MAX_CONTOUR_POINTS * 4), count: 0 };
     const render = () => {
       raf = requestAnimationFrame(render);
 
@@ -630,6 +635,20 @@ function App() {
           100,
       };
 
+      const contourGeometry: RectangleGeometry = {
+        width: shapeSizeSpring.x,
+        height: shapeSizeSpring.y,
+        radius: Math.min(shapeSizeSpring.x, shapeSizeSpring.y) / 2 * controls.shapeRadius / 100,
+        smoothing: controls.shapeSmoothing / 100,
+      };
+      // Translation, lighting and fusion share the same stable local perimeter.
+      const nextContourKey = Object.values(contourGeometry).join(',');
+      if (contourKey !== nextContourKey) {
+        corners = buildSmoothCorners(contourGeometry);
+        contour = buildRectangleContour(contourGeometry);
+        contourKey = nextContourKey;
+      }
+
       renderer.setUniforms({
         u_resolution: [canvasInfo.width * canvasInfo.dpr, canvasInfo.height * canvasInfo.dpr],
         u_dpr: canvasInfo.dpr,
@@ -641,7 +660,8 @@ function App() {
         u_shapeHeight: shapeSizeSpring.y,
         u_shapeRadius:
           ((Math.min(shapeSizeSpring.x, shapeSizeSpring.y) / 2) * controls.shapeRadius) / 100,
-        u_shapeRoundness: controls.shapeRoundness,
+        u_cornerHorizontal: corners.horizontal,
+        u_cornerVertical: corners.vertical,
         u_mergeRate: controls.mergeRate,
         u_glareAngle: (controls.glareAngle * Math.PI) / 180,
         u_showShape1: controls.showShape1 ? 1 : 0,
@@ -674,6 +694,14 @@ function App() {
           u_refFresnelRange: controls.refFresnelRange,
           u_refFresnelHardness: controls.refFresnelHardness / 100,
           u_refFresnelFactor: controls.refFresnelFactor / 100,
+          u_darkEdgeWidth: controls.darkEdgeWidth,
+          u_darkEdgeFactor: controls.darkEdgeFactor / 100,
+          u_darkEdgeSoftness: controls.darkEdgeSoftness,
+          u_darkEdgeFade: controls.darkEdgeFade / 100,
+          u_darkEdgeRange: controls.darkEdgeRange / 100,
+          u_darkEdgeLighting: controls.darkEdgeLighting / 100,
+          u_contourCount: contour.count,
+          u_contourPoints: contour.points,
           u_glareRange: controls.glareRange,
           u_glareHardness: controls.glareHardness / 100,
           u_glareConvergence: controls.glareConvergence / 100,

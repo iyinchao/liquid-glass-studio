@@ -15,7 +15,7 @@ struct Uniforms {
   u_shapeWidth: f32,
   u_shapeHeight: f32,
   u_shapeRadius: f32,
-  u_shapeRoundness: f32,
+  _shapePad: f32,
   u_mergeRate: f32,
   u_glareAngle: f32,
   u_shadowExpand: f32,
@@ -40,6 +40,17 @@ struct Uniforms {
   u_glareOppositeFactor: f32,
   u_glareFactor: f32,
   u_refDistance: f32,
+  u_darkEdgeWidth: f32,
+  u_darkEdgeFactor: f32,
+  u_darkEdgeSoftness: f32,
+  u_darkEdgeFade: f32,
+  u_darkEdgeRange: f32,
+  u_contourCount: i32,
+  u_darkEdgeLighting: f32,
+  _contourPad: i32,
+  u_cornerHorizontal: vec4f,
+  u_cornerVertical: vec4f,
+  u_contourPoints: array<vec4f, 128>,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;
@@ -72,6 +83,7 @@ fn safeNormalize(v: vec2f) -> vec2f {
 #include './lib/color.wgsl'
 
 fn vec2ToAngle(v: vec2f) -> f32 {
+  if (dot(v, v) < 0.000000000001) { return 0.0; }
   var angle = atan2(v.y, v.x);
   if (angle < 0.0) { angle += 2.0 * PI; }
   return angle;
@@ -99,6 +111,34 @@ fn getTextureDispersion(v_uv: vec2f, mixRate: f32, offset: vec2f, factor: f32) -
 
 // ---- Main fragment shader (STEP==9 equivalent) ----
 
+// Local rectangle coordinates never change when shapes translate or merge.
+fn rectangleContourPhase(pixel: vec2f) -> vec2f {
+  var bestDistance = 1e30;
+  var fraction = 0.0;
+  for (var i = 0; i < 128; i++) {
+    if (i >= u.u_contourCount) { break; }
+    let a = u.u_contourPoints[u32(i)];
+    let next = (i + 1) % u.u_contourCount;
+    let b = u.u_contourPoints[u32(next)];
+    let edge = b.xy - a.xy;
+    let t = clamp(dot(pixel - a.xy, edge) / max(dot(edge, edge), 0.000001), 0.0, 1.0);
+    let offset = pixel - mix(a.xy, b.xy, t);
+    let distance = dot(offset, offset);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      // Unwrap before interpolation, including on long straight edges.
+      fraction = mix(a.z, b.z + select(0.0, 1.0, next == 0), t);
+    }
+  }
+  let phase = 4.0 * PI * fraction;
+  return vec2f(cos(phase), sin(phase));
+}
+
+// Double-angle vectors encode the two opposite highlight peaks without a 0/2PI seam.
+fn doublePhase(v: vec2f, denominator: f32) -> vec2f {
+  return vec2f(v.x * v.x - v.y * v.y, 2.0 * v.x * v.y) / max(denominator, 1e-12);
+}
+
 @fragment
 fn fs_main(@builtin(position) frag_coord: vec4f, @location(0) v_uv: vec2f) -> @location(0) vec4f {
   let u_resolution1x = u.u_resolution / u.u_dpr;
@@ -111,7 +151,59 @@ fn fs_main(@builtin(position) frag_coord: vec4f, @location(0) v_uv: vec2f) -> @l
   // center of shape 2
   let p2 = (vec2f(0.0) - u.u_mouseSpring) / u.u_resolution.y;
   // merged shape
-  let merged = mainSDF(p1, p2, pixel);
+  let distances = shapeDistances(p1, p2, pixel);
+  let merged = smin(distances.x, distances.y, u.u_mergeRate);
+
+
+  // Derivatives must be evaluated before the per-pixel branches.
+  // Their magnitude keeps the radial border width in CSS pixels.
+  let sdfGradientVector = vec2f(dpdx(merged), -dpdy(merged));
+  let sdfGradient = max(length(sdfGradientVector), 0.000001);
+  let insideDistance = max(-merged / (sdfGradient * u.u_dpr), 0.0);
+  let edgeSoftness = max(u.u_darkEdgeSoftness, 0.5 / u.u_dpr);
+  var rimShade = 0.0;
+  if (u.u_contourCount > 1 && u.u_darkEdgeWidth > 0.0 && u.u_darkEdgeFactor > 0.0 &&
+      abs(merged) / (sdfGradient * u.u_dpr) < u.u_darkEdgeWidth + edgeSoftness + 2.0 / u.u_dpr) {
+    // Use the same smooth-union weight as the silhouette.
+    var h = step(distances.x, distances.y);
+    if (u.u_mergeRate > 0.0) {
+      h = clamp(0.5 + 0.5 * (distances.y - distances.x) / u.u_mergeRate, 0.0, 1.0);
+    }
+    if (u.u_showShape1 != 1) { h = 0.0; }
+    let localCircle = (pixel - u.u_resolution * 0.5) / u.u_dpr;
+    let circlePhase = doublePhase(localCircle, dot(localCircle, localCircle));
+    let rectanglePhase = rectangleContourPhase((pixel - u.u_mouseSpring) / u.u_dpr);
+    let arcPhase = mix(rectanglePhase, circlePhase, h);
+
+    let dx = 0.5 * (shapeDistances(p1, p2, pixel + vec2f(1.0, 0.0)) - shapeDistances(p1, p2, pixel - vec2f(1.0, 0.0)));
+    let dy = 0.5 * (shapeDistances(p1, p2, pixel + vec2f(0.0, 1.0)) - shapeDistances(p1, p2, pixel - vec2f(0.0, 1.0)));
+    let circleGradient = vec2f(dx.x, dy.x);
+    let rectangleGradient = vec2f(dx.y, dy.y);
+    let gradient = mix(rectangleGradient, circleGradient, h);
+    let reference = mix(length(rectangleGradient), length(circleGradient), h);
+    // Preserve cancellation at the neck: normalizing this vector would amplify noise.
+    let physicalPhase = doublePhase(gradient, reference * reference);
+    let phase = mix(arcPhase, physicalPhase, clamp(u.u_darkEdgeLighting, 0.0, 1.0));
+    let signal = dot(phase, vec2f(cos(2.0 * u.u_glareAngle), -sin(2.0 * u.u_glareAngle)));
+    let progress = acos(clamp(signal, -1.0, 1.0)) / PI;
+    let arcRate = mix(u.u_contourPoints[0].w, 2.0 / (PI * 100.0), h);
+    let coverage = clamp(u.u_darkEdgeRange, 0.0, 1.0);
+    let fade = coverage * clamp(u.u_darkEdgeFade, 0.0, 1.0);
+    let antialias = max(arcRate / u.u_dpr, 0.00001);
+    rimShade = (1.0 - smoothstep(
+      max(coverage - max(fade, antialias), 0.0),
+      max(coverage, 0.00001),
+      progress
+    )) * step(0.00001, coverage);
+  }
+  // Arc-length coverage changes opacity; radial width remains fixed inside the outline.
+  let darkEdgeOpacity = u.u_darkEdgeFactor * rimShade *
+    step(0.0001, u.u_darkEdgeWidth) *
+    (1.0 - smoothstep(
+      max(u.u_darkEdgeWidth - edgeSoftness, 0.0),
+      u.u_darkEdgeWidth + edgeSoftness,
+      insideDistance
+    ));
 
   var outColor: vec4f;
 
@@ -210,17 +302,21 @@ fn fs_main(@builtin(position) frag_coord: vec4f, @location(0) v_uv: vec2f) -> @l
       glareTintLCH.y += 30.0 * glareAngleFactor * glareGeoFactor;
       glareTintLCH.x = clamp(glareTintLCH.x, 0.0, 120.0);
 
+      let glareWeight = glareAngleFactor * glareGeoFactor * length(normal);
       outColor = mix(
         outColor,
         vec4f(LCH_TO_SRGB(glareTintLCH), 1.0),
-        glareAngleFactor * glareGeoFactor * length(normal)
+        glareWeight
       );
     }
   } else {
     outColor = textureSampleLevel(u_bg, u_sampler, v_uv, 0.0);
   }
 
-  // smooth edge transition
+  // The transparent angular plateau reproduces the original highlight exactly.
+  outColor = vec4f(outColor.rgb * (1.0 - darkEdgeOpacity), outColor.a);
+
+  // Share the silhouette coverage with the bright rim, including its antialiasing fringe.
   outColor = mix(outColor, textureSampleLevel(u_bg, u_sampler, v_uv, 0.0), smoothstep(-0.001, 0.001, merged));
 
   return outColor;

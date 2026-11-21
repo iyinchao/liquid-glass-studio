@@ -42,6 +42,25 @@ export function importPreset(file: File): Promise<PresetData> {
           return;
         }
 
+        // Migrate the earlier centered transition to an endpoint plus a fade ratio.
+        const { darkEdgeTransition: transition = 50, ...currentControls } = preset.controls as
+          typeof preset.controls & { darkEdgeTransition?: number; shapeModel?: string; shapeRoundness?: number };
+        // All imported presets now use continuous corners.
+        delete currentControls.shapeModel;
+        delete currentControls.shapeRoundness;
+        const coverage = currentControls.darkEdgeRange ?? (50 + transition / 2);
+        // Presets exported before dark edges keep their original appearance.
+        preset.controls = {
+          ...currentControls,
+          shapeSmoothing: preset.controls.shapeSmoothing ?? 100,
+          darkEdgeWidth: preset.controls.darkEdgeWidth ?? 1,
+          darkEdgeFactor: preset.controls.darkEdgeFactor ?? 0,
+          darkEdgeSoftness: preset.controls.darkEdgeSoftness ?? 0,
+          darkEdgeRange: coverage,
+          darkEdgeLighting: preset.controls.darkEdgeLighting ?? 25,
+          darkEdgeFade: preset.controls.darkEdgeFade ?? Math.min(100, transition / Math.max(coverage, 0.0001) * 100),
+        };
+
         resolve(preset);
       } catch (err) {
         reject(new Error(`Failed to parse preset file: ${err}`));
