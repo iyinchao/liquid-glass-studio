@@ -39,6 +39,7 @@ https://liquid-glass.iyinchao.cn/
 - Glare with customizable angle
 - Gaussian blur masking
 - Anti-aliasing
+- Dark edges (iOS 27) **NEW**
 
 **⚙️ Interactive Controls:**
 
