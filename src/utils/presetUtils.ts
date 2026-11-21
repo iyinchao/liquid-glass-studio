@@ -64,6 +64,7 @@ export function importPreset(file: File): Promise<PresetData> {
         preset.controls = {
           ...currentControls,
           showCursor: preset.controls.showCursor ?? false,
+          followMouse: preset.controls.followMouse ?? true,
           shapeSmoothing: preset.controls.shapeSmoothing ?? 100,
           darkEdgeWidth: preset.controls.darkEdgeWidth ?? 1,
           darkEdgeFactor: preset.controls.darkEdgeFactor ?? 0,

@@ -1,0 +1,63 @@
+.leva-shortcut-boolean {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+
+  kbd {
+    position: relative;
+    display: inline-block;
+    flex: 0 0 22px;
+    width: 22px;
+    height: 21px;
+    color: var(--leva-colors-highlight3);
+    font: 500 12px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    user-select: none;
+    transition: transform 80ms ease;
+
+    // A broad, rounded top and a shallow skirt mirror a physical keycap.
+    &::before {
+      content: '';
+      position: absolute;
+      inset: 1px 0 0;
+      box-sizing: border-box;
+      border: 1px solid #777d87;
+      border-radius: 5px;
+      background: #383e49;
+      box-shadow:
+        inset 1px 0 0 rgb(255 255 255 / 12%),
+        0 1px 1px rgb(0 0 0 / 25%);
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: auto 2px 2px;
+      height: 3px;
+      background:
+        linear-gradient(125deg, transparent 42%, #737984 46% 56%, transparent 60%) left bottom / 3px 3px no-repeat,
+        linear-gradient(55deg, transparent 42%, #737984 46% 56%, transparent 60%) right bottom / 3px 3px no-repeat;
+    }
+
+    span {
+      position: absolute;
+      z-index: 1;
+      top: 0;
+      left: 2px;
+      right: 2px;
+      height: 17px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
+      border: 1px solid #8a909a;
+      border-bottom-color: #20242d;
+      border-radius: 4px;
+      background: #4b515e;
+      box-shadow: inset 0 1px 0 rgb(255 255 255 / 8%);
+    }
+  }
+
+  &:has(input:active) kbd {
+    transform: translateY(2px);
+  }
+}

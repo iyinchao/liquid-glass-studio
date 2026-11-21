@@ -3,9 +3,12 @@ import { isChineseLanguage, isUzbekLanguage } from './utils';
 import { LevaVectorNew } from './components/LevaVectorNew/LevaVectorNew';
 import { LevaContainer } from './components/LevaContainer/LevaContainer';
 import { LevaCheckButtons } from './components/LevaCheckButtons';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { LevaShortcutBoolean } from './components/LevaShortcutBoolean/LevaShortcutBoolean';
 import { readControlFolderState, useControlFolders } from './utils/controlFolders';
 import languages from './utils/languages';
+
+const FOLLOW_MOUSE_SHORTCUT = 'F';
 
 export const useLevaControls = ({
   containerRender,
@@ -29,7 +32,7 @@ export const useLevaControls = ({
 
   const [folderState] = useState(readControlFolderState);
 
-  const [controls, controlsAPI] = useControls(
+  const [controls, controlsAPI, getControl] = useControls(
     () => ({
       basicSettings: folder({
         renderer: LevaCheckButtons({
@@ -68,6 +71,12 @@ export const useLevaControls = ({
           label: lang['editor.showCursor'],
           value: false,
         },
+        followMouse: LevaShortcutBoolean({
+          label: lang['editor.followMouse'],
+          checked: true,
+          shortcut: FOLLOW_MOUSE_SHORTCUT,
+          shortcutLabel: lang['editor.followMouseShortcut'],
+        }),
       }, { collapsed: folderState.basicSettings }),
       backgroundSettings: folder({
         bgType: LevaContainer({
@@ -317,6 +326,26 @@ export const useLevaControls = ({
     }),
     [langName, rendererOptions?.webgpuSupported],
   );
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || event.isComposing ||
+          event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      if (event.code !== `Key${FOLLOW_MOUSE_SHORTCUT}` &&
+          event.key.toUpperCase() !== FOLLOW_MOUSE_SHORTCUT) return;
+      const editing = [event.target, document.activeElement].some(target =>
+        target instanceof HTMLElement && (
+          target.isContentEditable || target.closest('[role="textbox"]') ||
+          target.matches('textarea, select, input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"])')
+        ),
+      );
+      if (editing) return;
+      event.preventDefault();
+      controlsAPI({ followMouse: !getControl('followMouse') });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [controlsAPI, getControl]);
 
   useControlFolders(lang, folderState);
 

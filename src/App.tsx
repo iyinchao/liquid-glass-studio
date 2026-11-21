@@ -292,7 +292,7 @@ function App() {
 
         const now = Date.now();
         const lastValue = stateRef.current.lastMouseSpringValue;
-        const dt = now - stateRef.current.lastMouseSpringTime;
+        const dt = Math.max(1, now - stateRef.current.lastMouseSpringTime);
         const dx = {
           x: c.value.x - lastValue.x,
           y: c.value.y - lastValue.y,
@@ -331,6 +331,15 @@ function App() {
   stateRef.current.canvasInfo = canvasInfo;
   stateRef.current.controls = controls;
   stateRef.current.langName = langName;
+
+  useLayoutEffect(() => {
+    const state = stateRef.current;
+    state.mouseSpring.stop();
+    state.mouseSpringSpeed = { x: 0, y: 0 };
+    state.lastMouseSpringValue = state.mouseSpring.get();
+    state.lastMouseSpringTime = null;
+    if (controls.followMouse) state.mouseSpring.start(state.canvasPointerPos);
+  }, [controls.followMouse]);
 
   // useEffect(() => {
   //   setLangName(controls.language[0] as keyof typeof languages);
@@ -434,7 +443,9 @@ function App() {
         x: (e.clientX - stateRef.current.canvasPos.x) * ci.dpr,
         y: (ci.height - (e.clientY - stateRef.current.canvasPos.y)) * ci.dpr,
       };
-      stateRef.current.mouseSpring.start(stateRef.current.canvasPointerPos);
+      if (stateRef.current.controls.followMouse) {
+        stateRef.current.mouseSpring.start(stateRef.current.canvasPointerPos);
+      }
     };
     canvasEl.addEventListener('pointermove', onPointerMove);
 
