@@ -19,7 +19,8 @@ uniform float u_mergeRate;
 uniform float u_shapeWidth;
 uniform float u_shapeHeight;
 uniform float u_shapeRadius;
-uniform float u_shapeRoundness;
+uniform vec4 u_cornerHorizontal;
+uniform vec4 u_cornerVertical;
 uniform vec4 u_tint;
 uniform float u_refThickness;
 uniform float u_refDistance;
@@ -28,6 +29,14 @@ uniform float u_refDispersion;
 uniform float u_refFresnelRange;
 uniform float u_refFresnelFactor;
 uniform float u_refFresnelHardness;
+uniform float u_darkEdgeWidth;
+uniform float u_darkEdgeFactor;
+uniform float u_darkEdgeSoftness;
+uniform float u_darkEdgeFade;
+uniform float u_darkEdgeRange;
+uniform float u_darkEdgeLighting;
+uniform int u_contourCount;
+uniform vec4 u_contourPoints[128];
 uniform float u_glareRange;
 uniform float u_glareConvergence;
 uniform float u_glareOppositeFactor;
@@ -43,38 +52,6 @@ out vec4 fragColor;
 
 #include './lib/sdf.glsl'
 #include './lib/math.glsl'
-
-// Superellipse SDF — currently unused (referenced only in commented-out code),
-// kept here for reference / future shape support.
-vec3 sdSuperellipse(vec2 p, float r, float n) {
-  p = p / r;
-  vec2 gs = sign(p);
-  vec2 ps = abs(p);
-  float gm = pow(ps.x, n) + pow(ps.y, n);
-  float gd = pow(gm, 1.0 / n) - 1.0;
-  vec2 g = gs * pow(ps, vec2(n - 1.0)) * pow(gm, 1.0 / n - 1.0);
-  p = abs(p);
-  if (p.y > p.x) p = p.yx;
-  n = 2.0 / n;
-  float s = 1.0;
-  float d = 1e20;
-  const int num = 24;
-  vec2 oq = vec2(1.0, 0.0);
-  for (int i = 1; i < num; i++) {
-    float h = float(i) / float(num - 1);
-    vec2 q = vec2(pow(cos(h * PI / 4.0), n), pow(sin(h * PI / 4.0), n));
-    vec2 pa = p - oq;
-    vec2 ba = q - oq;
-    vec2 z = pa - ba * clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
-    float d2 = dot(z, z);
-    if (d2 < d) {
-      d = d2;
-      s = pa.x * ba.y - pa.y * ba.x;
-    }
-    oq = q;
-  }
-  return vec3(sqrt(d) * sign(s) * r, g);
-}
 
 vec2 getNormal(vec2 p1, vec2 p2, vec2 p) {
   // 使用场景尺度自适应的 eps
@@ -119,6 +96,7 @@ vec2 getNormal3(vec2 p1, vec2 p2, vec2 p) {
 #include './lib/color.glsl'
 
 float vec2ToAngle(vec2 v) {
+  if (dot(v, v) < 0.000000000001) return 0.0;
   float angle = atan(v.y, v.x);
   if (angle < 0.0) angle += 2.0 * PI;
   return angle;
@@ -156,6 +134,34 @@ vec4 getTextureDispersion(
   return pixel;
 }
 
+// Local rectangle coordinates never change when shapes translate or merge.
+vec2 rectangleContourPhase(vec2 pixel) {
+  float bestDistance = 1e30;
+  float fraction = 0.0;
+  for (int i = 0; i < 128; i++) {
+    if (i >= u_contourCount) break;
+    vec4 a = u_contourPoints[i];
+    int next = (i + 1) % u_contourCount;
+    vec4 b = u_contourPoints[next];
+    vec2 edge = b.xy - a.xy;
+    float t = clamp(dot(pixel - a.xy, edge) / max(dot(edge, edge), 0.000001), 0.0, 1.0);
+    vec2 offset = pixel - mix(a.xy, b.xy, t);
+    float distance = dot(offset, offset);
+    if (distance < bestDistance) {
+      bestDistance = distance;
+      // Unwrap before interpolation, including on long straight edges.
+      fraction = mix(a.z, b.z + (next == 0 ? 1.0 : 0.0), t);
+    }
+  }
+  float phase = 4.0 * PI * fraction;
+  return vec2(cos(phase), sin(phase));
+}
+
+// Double-angle vectors encode the two opposite highlight peaks without a 0/2PI seam.
+vec2 doublePhase(vec2 v, float denominator) {
+  return vec2(v.x * v.x - v.y * v.y, 2.0 * v.x * v.y) / max(denominator, 1e-12);
+}
+
 void main() {
   vec2 u_resolution1x = u_resolution.xy / u_dpr;
   // center of shape 1
@@ -163,7 +169,57 @@ void main() {
   // center of shape 2
   vec2 p2 = (vec2(0, 0) - u_mouseSpring) / u_resolution.y;
   // merged shape
-  float merged = mainSDF(p1, p2, gl_FragCoord.xy);
+  vec2 distances = shapeDistances(p1, p2, gl_FragCoord.xy);
+  float merged = smin(distances.x, distances.y, u_mergeRate);
+
+
+  // Normalize the SDF gradient so the border stays in CSS pixels, including at merged corners.
+  vec2 sdfGradientVector = vec2(dFdx(merged), dFdy(merged));
+  float sdfGradient = max(length(sdfGradientVector), 0.000001);
+  float insideDistance = max(-merged / (sdfGradient * u_dpr), 0.0);
+  float edgeSoftness = max(u_darkEdgeSoftness, 0.5 / u_dpr);
+  float rimShade = 0.0;
+  if (u_contourCount > 1 && u_darkEdgeWidth > 0.0 && u_darkEdgeFactor > 0.0 &&
+      abs(merged) / (sdfGradient * u_dpr) < u_darkEdgeWidth + edgeSoftness + 2.0 / u_dpr) {
+    // Use the same smooth-union weight as the silhouette.
+    float h = u_mergeRate > 0.0
+      ? clamp(0.5 + 0.5 * (distances.y - distances.x) / u_mergeRate, 0.0, 1.0)
+      : step(distances.x, distances.y);
+    if (u_showShape1 != 1) h = 0.0;
+    vec2 localCircle = (gl_FragCoord.xy - u_resolution * 0.5) / u_dpr;
+    vec2 circlePhase = doublePhase(localCircle, dot(localCircle, localCircle));
+    vec2 rectanglePhase = rectangleContourPhase((gl_FragCoord.xy - u_mouseSpring) / u_dpr);
+    vec2 arcPhase = mix(rectanglePhase, circlePhase, h);
+
+    vec2 dx = 0.5 * (shapeDistances(p1, p2, gl_FragCoord.xy + vec2(1.0, 0.0)) - shapeDistances(p1, p2, gl_FragCoord.xy - vec2(1.0, 0.0)));
+    vec2 dy = 0.5 * (shapeDistances(p1, p2, gl_FragCoord.xy + vec2(0.0, 1.0)) - shapeDistances(p1, p2, gl_FragCoord.xy - vec2(0.0, 1.0)));
+    vec2 circleGradient = vec2(dx.x, dy.x);
+    vec2 rectangleGradient = vec2(dx.y, dy.y);
+    vec2 gradient = mix(rectangleGradient, circleGradient, h);
+    float reference = mix(length(rectangleGradient), length(circleGradient), h);
+    // Preserve cancellation at the neck: normalizing this vector would amplify noise.
+    vec2 physicalPhase = doublePhase(gradient, reference * reference);
+    vec2 phase = mix(arcPhase, physicalPhase, clamp(u_darkEdgeLighting, 0.0, 1.0));
+    float signal = dot(phase, vec2(cos(2.0 * u_glareAngle), -sin(2.0 * u_glareAngle)));
+    float progress = acos(clamp(signal, -1.0, 1.0)) / PI;
+    float arcRate = mix(u_contourPoints[0].w, 2.0 / (PI * 100.0), h);
+    float coverage = clamp(u_darkEdgeRange, 0.0, 1.0);
+    float fade = coverage * clamp(u_darkEdgeFade, 0.0, 1.0);
+    float antialias = max(arcRate / u_dpr, 0.00001);
+    rimShade = (1.0 - smoothstep(
+      max(coverage - max(fade, antialias), 0.0),
+      max(coverage, 0.00001),
+      progress
+    )) * step(0.00001, coverage);
+  }
+  // Arc-length coverage changes opacity; radial width remains fixed inside the outline.
+  float darkEdgeOpacity = u_darkEdgeFactor * rimShade *
+    step(0.0001, u_darkEdgeWidth) *
+    (1.0 - smoothstep(
+      max(u_darkEdgeWidth - edgeSoftness, 0.0),
+      u_darkEdgeWidth + edgeSoftness,
+      insideDistance
+    ));
 
   vec4 outColor;
   // step 0: sdfs
@@ -566,17 +622,21 @@ void main() {
         glareTintLCH.y += 30.0 * glareAngleFactor * glareGeoFactor;
         glareTintLCH.x = clamp(glareTintLCH.x, 0.0, 120.0);
 
+        float glareWeight = glareAngleFactor * glareGeoFactor * length(normal);
         outColor = mix(
           outColor,
           vec4(LCH_TO_SRGB(glareTintLCH), 1.0),
-          glareAngleFactor * glareGeoFactor * length(normal)
+          glareWeight
         );
       }
     } else {
       outColor = texture(u_bg, v_uv);
     }
 
-    // smooth
+    // The transparent angular plateau reproduces the original highlight exactly.
+    outColor.rgb *= 1.0 - darkEdgeOpacity;
+
+    // Share the silhouette coverage with the bright rim, including its antialiasing fringe.
     outColor = mix(outColor, texture(u_bg, v_uv), smoothstep(-0.001, 0.001, merged));
 
   }

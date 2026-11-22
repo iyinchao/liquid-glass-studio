@@ -18,8 +18,8 @@ type ContainerSettings = {
   labelWidth?: 'auto' | number;
   contentWidth?: string;
 };
-type ContainerValueType = { contentValue: any };
-type ContainerProps = ContainerValueType & ContainerSettings;
+type ContainerValueType = number;
+type ContainerProps = { contentValue: ContainerValueType } & ContainerSettings;
 
 type ContainerInputProps = LevaInputProps<ContainerValueType, ContainerSettings, string>;
 

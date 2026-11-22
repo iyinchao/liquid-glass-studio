@@ -40,6 +40,7 @@ https://liquid-glass.iyinchao.cn/
 - 高斯模糊遮罩
 - 阴影
 - 抗锯齿处理
+- 暗边（iOS 27）**NEW**
 
 **⚙️ 交互控制面板**：
 

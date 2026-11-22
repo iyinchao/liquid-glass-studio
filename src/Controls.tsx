@@ -1,11 +1,14 @@
 import { useControls, folder, Leva } from 'leva';
 import { isChineseLanguage, isUzbekLanguage } from './utils';
 import { LevaVectorNew } from './components/LevaVectorNew/LevaVectorNew';
-// import { LevaImageUpload } from './components/LevaImageUpload/LevaImageUpload';
 import { LevaContainer } from './components/LevaContainer/LevaContainer';
 import { LevaCheckButtons } from './components/LevaCheckButtons';
-import { useLayoutEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { LevaShortcutBoolean } from './components/LevaShortcutBoolean/LevaShortcutBoolean';
+import { readControlFolderState, useControlFolders } from './utils/controlFolders';
 import languages from './utils/languages';
+
+const FOLLOW_MOUSE_SHORTCUT = 'F';
 
 export const useLevaControls = ({
   containerRender,
@@ -27,9 +30,11 @@ export const useLevaControls = ({
     return languages[langName];
   }, [langName]);
 
-  const [controls, controlsAPI] = useControls(
+  const [folderState] = useState(readControlFolderState);
+
+  const [controls, controlsAPI, getControl] = useControls(
     () => ({
-      ['basicSettings']: folder({
+      basicSettings: folder({
         renderer: LevaCheckButtons({
           label: lang['editor.renderer'],
           selected: ['webgl'],
@@ -49,166 +54,39 @@ export const useLevaControls = ({
             rendererOptions?.onRendererChange?.(v[0] as 'webgl' | 'webgpu');
           },
         }),
-        language: LevaCheckButtons({
+        language: {
           label: lang['editor.language'],
-          selected: [langName],
-          options: !isChineseLanguage()
-            ? [
-              { value: 'en-US', label: 'English' },
-              { value: 'zh-CN', label: '简体中文' },
-              { value: 'uz-UZ', label: "O'zbekcha" },
-            ]
-            : [
-              { value: 'zh-CN', label: '简体中文' },
-              { value: 'en-US', label: 'English' },
-              { value: 'uz-UZ', label: "O'zbekcha" },
-            ],
-          onClick: (v) => {
-            setLangName((v as (keyof typeof languages)[])[0]);
+          value: langName,
+          options: {
+            '简体中文': 'zh-CN',
+            English: 'en-US',
+            "O'zbekcha": 'uz-UZ',
           },
-          singleMode: true,
+          transient: false,
+          onChange: (value: keyof typeof languages) => {
+            setLangName(value);
+          },
+        },
+        showCursor: {
+          label: lang['editor.showCursor'],
+          value: false,
+        },
+        followMouse: LevaShortcutBoolean({
+          label: lang['editor.followMouse'],
+          checked: true,
+          shortcut: FOLLOW_MOUSE_SHORTCUT,
+          shortcutLabel: lang['editor.followMouseShortcut'],
         }),
-      }),
-      refThickness: {
-        label: lang['editor.refThickness'],
-        min: 1,
-        max: 80,
-        step: 0.01,
-        value: 20,
-      },
-      refDistance: {
-        label: lang['editor.refDistance'],
-        min: 0,
-        max: 0.2,
-        step: 0.001,
-        value: 0.05,
-      },
-      refFactor: {
-        label: lang['editor.refFactor'],
-        min: 1,
-        max: 4,
-        step: 0.01,
-        value: 1.4,
-      },
-      refDispersion: {
-        label: lang['editor.refDispersion'],
-        min: 0,
-        max: 50,
-        step: 0.01,
-        value: 7,
-      },
-      refFresnelRange: {
-        label: lang['editor.refFresnelRange'],
-        min: 0,
-        max: 100,
-        step: 0.01,
-        value: 30,
-      },
-      refFresnelHardness: {
-        label: lang['editor.refFresnelHardness'],
-        min: 0,
-        max: 100,
-        step: 0.01,
-        value: 20,
-      },
-      refFresnelFactor: {
-        label: lang['editor.refFresnelFactor'],
-        min: 0,
-        max: 100,
-        step: 0.01,
-        value: 20,
-      },
-      glareRange: {
-        label: lang['editor.glareRange'],
-        min: 0,
-        max: 100,
-        step: 0.01,
-        value: 30,
-      },
-      glareHardness: {
-        label: lang['editor.glareHardness'],
-        min: 0,
-        max: 100,
-        step: 0.01,
-        value: 20,
-      },
-      glareFactor: {
-        label: lang['editor.glareFactor'],
-        min: 0,
-        max: 120,
-        step: 0.01,
-        value: 90,
-      },
-      glareConvergence: {
-        label: lang['editor.glareConvergence'],
-        min: 0,
-        max: 100,
-        step: 0.01,
-        value: 50,
-      },
-      glareOppositeFactor: {
-        label: lang['editor.glareOppositeFactor'],
-        min: 0,
-        max: 100,
-        step: 0.01,
-        value: 80,
-      },
-      glareAngle: {
-        label: lang['editor.glareAngle'],
-        min: -180,
-        max: 180,
-        step: 0.01,
-        value: -45,
-      },
-      blurRadius: {
-        label: lang['editor.blurRadius'],
-        min: 1,
-        max: 200,
-        step: 1,
-        value: 1,
-      },
-      blurEdge: {
-        label: lang['editor.blurEdge'],
-        value: true,
-      },
-      tint: {
-        label: lang['editor.tint'],
-        value: { r: 255, b: 255, g: 255, a: 0 },
-      },
-      shadowExpand: {
-        label: lang['editor.shadowExpand'],
-        min: 2,
-        max: 100,
-        step: 0.01,
-        value: 25,
-      },
-      shadowFactor: {
-        label: lang['editor.shadowFactor'],
-        min: 0,
-        max: 100,
-        step: 0.01,
-        value: 15,
-      },
-      shadowPosition: LevaVectorNew({
-        label: lang['editor.shadowPosition'],
-        x: 0,
-        y: -10,
-        xMax: 20,
-        yMax: 20,
-      }),
-      bgType: LevaContainer({
-        label: lang['editor.bgType'],
-        contentValue: 0,
-        content: containerRender.bgType,
-      }),
-      // customBgImage: LevaImageUpload({
-      //   label: lang['editor.customBgImage'],
-      //   file: undefined,
-      //   // disabled: renderProps.isRendering,
-      //   // alphaPatternColorA: '#bbb',
-      //   // alphaPatternColorB: '#eee',
-      // }),
-      ['shapeSettings']: folder({
+      }, { collapsed: folderState.basicSettings }),
+      backgroundSettings: folder({
+        bgType: LevaContainer({
+          label: lang['editor.bgType'],
+          showLabel: false,
+          contentValue: 0,
+          content: containerRender.bgType,
+        }),
+      }, { collapsed: folderState.backgroundSettings }),
+      shapeSettings: folder({
         shapeWidth: {
           label: lang['editor.shapeWidth'],
           min: 20,
@@ -228,14 +106,18 @@ export const useLevaControls = ({
           min: 1,
           max: 100,
           step: 0.1,
-          value: 80,
+          value: 50,
         },
-        shapeRoundness: {
-          label: lang['editor.shapeRoundness'],
-          min: 2,
-          max: 7,
-          step: 0.01,
-          value: 5,
+        shapeSmoothing: {
+          label: lang['editor.shapeSmoothing'],
+          min: 0,
+          max: 100,
+          step: 1,
+          value: 100,
+        },
+        showShape1: {
+          label: lang['editor.showShape1'],
+          value: true,
         },
         mergeRate: {
           label: lang['editor.mergeRate'],
@@ -244,64 +126,228 @@ export const useLevaControls = ({
           step: 0.01,
           value: 0.05,
         },
-        showShape1: {
-          label: lang['editor.showShape1'],
-          value: true,
-        },
-      }),
-      animationSettings: folder({
         springSizeFactor: {
-          label: lang['editor.springSizeFactor'],
+          label: <span title={lang['editor.springSizeHint']}>{lang['editor.springSizeFactor']}</span>,
           min: 0,
           max: 50,
           step: 0.01,
           value: 10,
         },
-      }, {
-        collapsed: true
-      }),
-      ['debugSettings']: folder({
+      }, { collapsed: folderState.shapeSettings }),
+      materialSettings: folder({
+        refThickness: {
+          label: lang['editor.refThickness'],
+          min: 1,
+          max: 80,
+          step: 0.01,
+          value: 20,
+        },
+        refDistance: {
+          label: lang['editor.refDistance'],
+          min: 0,
+          max: 0.2,
+          step: 0.001,
+          value: 0.05,
+        },
+        refFactor: {
+          label: <span title={lang['editor.refFactorHint']}>{lang['editor.refFactor']}</span>,
+          min: 1,
+          max: 4,
+          step: 0.01,
+          value: 1.4,
+        },
+        refDispersion: {
+          label: lang['editor.refDispersion'],
+          min: 0,
+          max: 50,
+          step: 0.01,
+          value: 7,
+        },
+        tint: {
+          label: lang['editor.tint'],
+          value: { r: 255, b: 255, g: 255, a: 0 },
+        },
+        blurRadius: {
+          label: lang['editor.blurRadius'],
+          min: 1,
+          max: 200,
+          step: 1,
+          value: 1,
+        },
+        blurEdge: {
+          label: lang['editor.blurEdge'],
+          value: true,
+        },
+      }, { collapsed: folderState.materialSettings }),
+      lightingSettings: folder({
+        glareAngle: {
+          label: lang['editor.glareAngle'],
+          min: -180,
+          max: 180,
+          step: 0.01,
+          value: 0,
+        },
+        glareFactor: {
+          label: lang['editor.glareFactor'],
+          min: 0,
+          max: 120,
+          step: 0.01,
+          value: 90,
+        },
+        glareRange: {
+          label: lang['editor.glareRange'],
+          min: 0,
+          max: 100,
+          step: 0.01,
+          value: 30,
+        },
+        glareHardness: {
+          label: lang['editor.glareHardness'],
+          min: 0,
+          max: 100,
+          step: 0.01,
+          value: 20,
+        },
+        glareConvergence: {
+          label: lang['editor.glareConvergence'],
+          min: 0,
+          max: 100,
+          step: 0.01,
+          value: 50,
+        },
+        glareOppositeFactor: {
+          label: <span title={lang['editor.glareOppositeHint']}>{lang['editor.glareOppositeFactor']}</span>,
+          min: 0,
+          max: 100,
+          step: 0.01,
+          value: 80,
+        },
+      }, { collapsed: folderState.lightingSettings }),
+      reflectionSettings: folder({
+        refFresnelFactor: {
+          label: <span title={lang['editor.refFresnelHint']}>{lang['editor.refFresnelFactor']}</span>,
+          min: 0,
+          max: 100,
+          step: 0.01,
+          value: 20,
+        },
+        refFresnelRange: {
+          label: <span title={lang['editor.refFresnelHint']}>{lang['editor.refFresnelRange']}</span>,
+          min: 0,
+          max: 100,
+          step: 0.01,
+          value: 30,
+        },
+        refFresnelHardness: {
+          label: <span title={lang['editor.refFresnelHint']}>{lang['editor.refFresnelHardness']}</span>,
+          min: 0,
+          max: 100,
+          step: 0.01,
+          value: 20,
+        },
+      }, { collapsed: folderState.reflectionSettings }),
+      darkEdgeSettings: folder({
+        darkEdgeFactor: {
+          label: lang['editor.darkEdgeFactor'],
+          min: 0,
+          max: 100,
+          step: 1,
+          value: 60,
+        },
+        darkEdgeWidth: {
+          label: lang['editor.darkEdgeWidth'],
+          min: 0,
+          max: 10,
+          step: 0.1,
+          value: 1,
+        },
+        darkEdgeRange: {
+          label: lang['editor.darkEdgeRange'],
+          min: 0,
+          max: 100,
+          step: 1,
+          value: 75,
+        },
+        darkEdgeFade: {
+          label: lang['editor.darkEdgeFade'],
+          min: 0,
+          max: 100,
+          step: 1,
+          value: 67,
+        },
+        darkEdgeSoftness: {
+          label: lang['editor.darkEdgeSoftness'],
+          min: 0,
+          max: 5,
+          step: 0.1,
+          value: 0,
+        },
+        darkEdgeLighting: {
+          render: () => false,
+          label: <span title={lang['editor.darkEdgeLightingHint']}>{lang['editor.darkEdgeLighting']}</span>,
+          min: 0,
+          max: 100,
+          step: 1,
+          value: 25,
+        },
+      }, { collapsed: folderState.darkEdgeSettings }),
+      shadowSettings: folder({
+        shadowFactor: {
+          label: lang['editor.shadowFactor'],
+          min: 0,
+          max: 100,
+          step: 0.01,
+          value: 15,
+        },
+        shadowExpand: {
+          label: lang['editor.shadowExpand'],
+          min: 2,
+          max: 100,
+          step: 0.01,
+          value: 25,
+        },
+        shadowPosition: LevaVectorNew({
+          label: lang['editor.shadowPosition'],
+          x: 0,
+          y: -10,
+          xMax: 20,
+          yMax: 20,
+        }),
+      }, { collapsed: folderState.shadowSettings }),
+      debugSettings: folder({
         step: {
-          label: 'Show Step',
+          label: lang['editor.step'],
           value: 9,
           min: 0,
           max: 9,
           step: 1,
         },
-      }, {
-        collapsed: true
-      }),
+      }, { collapsed: folderState.debugSettings }),
     }),
     [langName, rendererOptions?.webgpuSupported],
   );
 
-  useLayoutEffect(() => {
-    const levaRoot = document.querySelector('#root>[class^=leva]');
-    if (!levaRoot) {
-      return;
-    }
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.repeat || event.isComposing ||
+          event.ctrlKey || event.metaKey || event.altKey || event.shiftKey) return;
+      if (event.code !== `Key${FOLLOW_MOUSE_SHORTCUT}` &&
+          event.key.toUpperCase() !== FOLLOW_MOUSE_SHORTCUT) return;
+      const editing = [event.target, document.activeElement].some(target =>
+        target instanceof HTMLElement && (
+          target.isContentEditable || target.closest('[role="textbox"]') ||
+          target.matches('textarea, select, input:not([type="checkbox"]):not([type="radio"]):not([type="button"]):not([type="submit"]):not([type="reset"])')
+        ),
+      );
+      if (editing) return;
+      event.preventDefault();
+      controlsAPI({ followMouse: !getControl('followMouse') });
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [controlsAPI, getControl]);
 
-    setTimeout(() => {
-      const controlEls = (levaRoot.lastChild as HTMLDivElement).querySelectorAll('&>div>div');
-      controlEls.forEach((el) => {
-        const ctrlEl = el as HTMLDivElement;
-        const styleStr = ctrlEl.getAttribute('style');
-        if (styleStr && styleStr.includes('folder')) {
-          // get title str:
-          const titleEl = ctrlEl.querySelector('&>div>svg+div') as HTMLDivElement;
-          if (!titleEl) {
-            return;
-          }
-          const titleStr = titleEl.innerText;
-          ctrlEl.style.setProperty(
-            '--i18n-name',
-            `"${lang[`editor.${titleStr}` as keyof Omit<typeof lang, '_settings'>] ?? titleStr}"`,
-          );
-          ctrlEl.dataset.levaFolder = '1';
-        }
-      });
-    }, 0);
-  }, [lang]);
+  useControlFolders(lang, folderState);
 
   const levaGlobal = (
     <Leva

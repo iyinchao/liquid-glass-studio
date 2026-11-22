@@ -10,7 +10,7 @@ struct Uniforms {
   u_shapeWidth: f32,
   u_shapeHeight: f32,
   u_shapeRadius: f32,
-  u_shapeRoundness: f32,
+  _shapePad: f32,
   u_mergeRate: f32,
   u_glareAngle: f32,
   u_shadowExpand: f32,
@@ -36,6 +36,16 @@ struct Uniforms {
   u_glareOppositeFactor: f32,
   u_glareFactor: f32,
   _pad1: f32,
+  u_darkEdgeWidth: f32,
+  u_darkEdgeFactor: f32,
+  u_darkEdgeSoftness: f32,
+  u_darkEdgeFade: f32,
+  u_darkEdgeRange: f32,
+  u_contourCount: i32,
+  u_darkEdgeLighting: f32,
+  _contourPad: i32,
+  u_cornerHorizontal: vec4f,
+  u_cornerVertical: vec4f,
 };
 
 @group(0) @binding(0) var<uniform> u: Uniforms;

@@ -66,17 +66,15 @@
 }
 
 .bgSelect {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 6px;
-  margin-left: -44px;
   z-index: 2;
   position: relative;
 
   .bgSelectItem {
-    width: 60px;
-    height: 60px;
-    flex-shrink: 0;
+    width: 100%;
+    aspect-ratio: 1;
     border: 1px solid var(--leva-colors-elevation3);
     border-radius: var(--leva-radii-sm);
     background-size: cover;
