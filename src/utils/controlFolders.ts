@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef } from 'react';
 import type languages from './languages';
 
-const STORAGE_KEY = 'liquid-glass-studio:control-folders:v2';
+const STORAGE_KEY = 'liquid-glass-studio:control-folders:v3';
+const PREVIOUS_STORAGE_KEY = 'liquid-glass-studio:control-folders:v2';
 const LEGACY_STORAGE_KEY = 'liquid-glass-studio:control-folders:v1';
 const DEFAULT_COLLAPSED = {
   shapeSettings: false,
@@ -11,7 +12,7 @@ const DEFAULT_COLLAPSED = {
   darkEdgeSettings: true,
   shadowSettings: true,
   backgroundSettings: false,
-  basicSettings: true,
+  basicSettings: false,
   debugSettings: true,
 };
 
@@ -23,12 +24,15 @@ export function readControlFolderState(): FolderState {
   const state = { ...DEFAULT_COLLAPSED };
   try {
     const current = localStorage.getItem(STORAGE_KEY);
-    const saved = JSON.parse(current ?? localStorage.getItem(LEGACY_STORAGE_KEY) ?? '{}');
+    const previous = localStorage.getItem(PREVIOUS_STORAGE_KEY);
+    const saved = JSON.parse(current ?? previous ?? localStorage.getItem(LEGACY_STORAGE_KEY) ?? '{}');
     for (const key of Object.keys(state) as FolderId[]) {
       if (typeof saved?.[key] === 'boolean') state[key] = saved[key];
     }
-    // Apply the new background default once while keeping other saved folders.
-    if (current === null) state.backgroundSettings = false;
+    // Apply the new app-settings default once, preserving other saved folders.
+    if (current === null) state.basicSettings = false;
+    // Keep the earlier background-default migration for pre-v2 preferences.
+    if (current === null && previous === null) state.backgroundSettings = false;
   } catch {
     // Browsers that block storage can still use all controls.
   }
